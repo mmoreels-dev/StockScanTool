@@ -1,0 +1,67 @@
+@page "/"
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-brand">
+            <div class="brand-icon">SS</div>
+            <h1>StockScanTool</h1>
+            <p>Barcode Scanner</p>
+        </div>
+
+        <div class="form-group">
+            <label>Server Address</label>
+            <input @bind="serverUrl" placeholder="http://192.168.1.100:5168" />
+        </div>
+
+        <div class="form-group">
+            <label>Device API Key</label>
+            <input @bind="apiKey" type="password" placeholder="Enter your device API key" />
+        </div>
+
+        @if (!string.IsNullOrEmpty(error))
+        {
+            <div class="error-msg">@error</div>
+        }
+
+        <button class="btn btn-primary btn-block" @onclick="Login" disabled="@loading">
+            @if (loading) { <span class="spinner"></span> }
+            else { <span>Connect</span> }
+        </button>
+    </div>
+</div>
+
+@code {
+    private string serverUrl = "";
+    private string apiKey = "";
+    private string error = "";
+    private bool loading;
+
+    private async Task Login()
+    {
+        if (string.IsNullOrWhiteSpace(serverUrl) || string.IsNullOrWhiteSpace(apiKey))
+        {
+            error = "Please enter both fields.";
+            return;
+        }
+
+        loading = true;
+        error = "";
+
+        Api.SetBaseUrl(serverUrl);
+        var success = await Api.LoginAsync(apiKey);
+
+        if (success)
+        {
+            Nav.NavigateTo("/scanner");
+        }
+        else
+        {
+            error = "Invalid API key or device inactive.";
+        }
+
+        loading = false;
+    }
+}

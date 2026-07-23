@@ -1,0 +1,98 @@
+@page "/"
+@rendermode InteractiveServer
+@using StockScanTool.Web.Services
+@inject ApiClient Api
+
+<h3>Dashboard</h3>
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="error-banner">@error</div>
+}
+
+@if (summary is null && string.IsNullOrEmpty(error))
+{
+    <p>Loading...</p>
+}
+else if (summary is not null)
+{
+    <div class="stat-cards">
+        <div class="stat-card">
+            <div class="stat-value">@summary.TotalStores</div>
+            <div class="stat-label">Stores</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@summary.TotalProducts</div>
+            <div class="stat-label">Products</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@summary.TotalDevices</div>
+            <div class="stat-label">Devices</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@summary.TotalSalesRevenue.ToString("C")</div>
+            <div class="stat-label">Total Revenue</div>
+        </div>
+    </div>
+
+    <div class="panels">
+        <div class="panel">
+            <h4>Sales by Store</h4>
+            @if (summary.SalesByStore.Any())
+            {
+                <table class="data-table">
+                    <thead><tr><th>Store</th><th>Transactions</th><th>Revenue</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in summary.SalesByStore.OrderByDescending(x => x.TotalRevenue))
+                        {
+                            <tr>
+                                <td>@s.StoreName</td>
+                                <td>@s.TransactionCount</td>
+                                <td>@s.TotalRevenue.ToString("C")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="empty">No sales recorded yet.</p>
+            }
+        </div>
+
+        <div class="panel">
+            <h4>Stock Levels</h4>
+            @if (summary.StockLevels.Any())
+            {
+                <table class="data-table">
+                    <thead><tr><th>Product</th><th>Store</th><th>Qty</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in summary.StockLevels)
+                        {
+                            <tr class="@(s.QuantityOnHand == 0 ? "row-danger" : s.QuantityOnHand <= 5 ? "row-warning" : "")">
+                                <td>@s.ProductName</td>
+                                <td>@s.StoreName</td>
+                                <td>@s.QuantityOnHand</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="empty">No inventory data.</p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardSummaryDto? summary;
+    private string error = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { summary = await Api.GetDashboard(); }
+        catch { error = "Could not connect to the API. Make sure the API server is running."; }
+    }
+}

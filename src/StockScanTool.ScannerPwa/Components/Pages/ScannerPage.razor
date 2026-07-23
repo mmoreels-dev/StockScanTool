@@ -1,0 +1,233 @@
+@page "/scanner"
+@inject ApiService Api
+@inject NavigationManager Nav
+@implements IDisposable
+@inject BarcodeScannerService Scanner
+@inject IJSRuntime JS
+
+@if (!Api.IsAuthenticated)
+{
+    <div class="not-auth">
+        <p>Not connected.</p>
+        <button class="btn btn-primary" @onclick="GoLogin">Go to Login</button>
+    </div>
+}
+else
+{
+    <div class="scanner-layout">
+        <!-- Top Bar -->
+        <div class="scanner-topbar">
+            <div class="topbar-info">
+                <strong>@Api.StoreName</strong>
+                <small>@Api.DeviceName</small>
+            </div>
+            <button class="btn btn-sm btn-outline" @onclick="Logout">Logout</button>
+        </div>
+
+        <!-- Camera -->
+        <div class="camera-container">
+            <div id="barcode-reader"></div>
+
+            @if (lastScan is not null && !showCart)
+            {
+                <div class="scan-overlay" @onclick="() => lastScan = null">
+                    <div class="scan-card" @onclick:stopPropagation>
+                        <h3>@lastScan.Name</h3>
+                        <div class="scan-price">@lastScan.Price.ToString("C")</div>
+                        <div class="scan-sku">SKU: @lastScan.Sku</div>
+                        <button class="btn btn-success btn-block" @onclick="AddToCart">Add to Cart</button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Bottom Cart Bar -->
+        <div class="scanner-bottombar">
+            <div class="cart-info">
+                <span class="cart-count">@cart.Count item(s)</span>
+                <span class="cart-total">@cart.Sum(c => c.Total):C</span>
+            </div>
+            <div class="cart-actions">
+                <button class="btn btn-primary" @onclick="ToggleCart"
+                        disabled="@(cart.Count == 0)">
+                    View Cart
+                </button>
+                <button class="btn btn-success" @onclick="Checkout"
+                        disabled="@(cart.Count == 0)">
+                    Checkout
+                </button>
+            </div>
+        </div>
+
+        <!-- Cart Modal -->
+        @if (showCart)
+        {
+            <div class="modal-backdrop" @onclick="() => showCart = false">
+                <div class="modal-card" @onclick:stopPropagation>
+                    <h3>Shopping Cart</h3>
+
+                    @if (cart.Count == 0)
+                    {
+                        <p class="empty">Cart is empty.</p>
+                    }
+                    else
+                    {
+                        <table class="cart-table">
+                            <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var item in cart)
+                                {
+                                    <tr>
+                                        <td>@item.Name</td>
+                                        <td>
+                                            <button class="qty-btn" @onclick="() => ChangeQty(item, -1)">-</button>
+                                            @item.Quantity
+                                            <button class="qty-btn" @onclick="() => ChangeQty(item, 1)">+</button>
+                                        </td>
+                                        <td>@item.Total.ToString("C")</td>
+                                        <td><button class="btn-remove" @onclick="() => RemoveItem(item)">x</button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <div class="cart-footer">
+                            <strong>Total: @cart.Sum(c => c.Total):C</strong>
+                        </div>
+                    }
+
+                    <button class="btn btn-secondary btn-block" @onclick="() => showCart = false">Close</button>
+                </div>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <div class="toast @messageType">@message</div>
+        }
+    </div>
+}
+
+@code {
+    private List<CartItem> cart = new();
+    private BarcodeLookupResponse? lastScan;
+    private bool showCart;
+    private string message = "";
+    private string messageType = "success";
+
+    protected override Task OnInitializedAsync()
+    {
+        Scanner.OnBarcodeDetected += OnBarcodeDetected;
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Api.IsAuthenticated)
+        {
+            try
+            {
+                await Scanner.StartScanningAsync("barcode-reader");
+            }
+            catch (Exception ex)
+            {
+                ShowMessage($"Camera error: {ex.Message}", "error");
+            }
+        }
+    }
+
+    private async void OnBarcodeDetected(string barcode)
+    {
+        if (lastScan is not null) return;
+
+        await Scanner.StopScanningAsync();
+
+        var product = await Api.LookupBarcodeAsync(barcode);
+        if (product is null)
+        {
+            ShowMessage($"Barcode not found: {barcode}", "error");
+            await Scanner.StartScanningAsync("barcode-reader");
+            return;
+        }
+
+        lastScan = product;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void AddToCart()
+    {
+        if (lastScan is null) return;
+
+        var existing = cart.FirstOrDefault(c => c.ProductId == lastScan.Id);
+        if (existing is not null)
+            existing.Quantity++;
+        else
+            cart.Add(new CartItem
+            {
+                ProductId = lastScan.Id,
+                Name = lastScan.Name,
+                Barcode = lastScan.Barcode,
+                Price = lastScan.Price,
+                Quantity = 1
+            });
+
+        ShowMessage($"{lastScan.Name} added", "success");
+        lastScan = null;
+        _ = Scanner.StartScanningAsync("barcode-reader");
+    }
+
+    private async Task Checkout()
+    {
+        if (cart.Count == 0) return;
+
+        var confirm = await JS.InvokeAsync<bool>("confirm",
+            $"Complete sale for {cart.Count} item(s) totalling {cart.Sum(c => c.Total):C}?");
+        if (!confirm) return;
+
+        var result = await Api.SubmitSaleAsync(cart);
+        if (result is not null)
+        {
+            ShowMessage($"Sale #{result.Id} complete — {result.TotalAmount:C}", "success");
+            cart.Clear();
+        }
+        else
+        {
+            ShowMessage("Sale failed — check stock levels.", "error");
+        }
+    }
+
+    private void ChangeQty(CartItem item, int delta)
+    {
+        item.Quantity += delta;
+        if (item.Quantity <= 0) cart.Remove(item);
+    }
+
+    private void RemoveItem(CartItem item) => cart.Remove(item);
+    private void ToggleCart() => showCart = !showCart;
+
+    private async Task Logout()
+    {
+        await Scanner.StopScanningAsync();
+        Api.Logout();
+        Nav.NavigateTo("/");
+    }
+
+    private void GoLogin() => Nav.NavigateTo("/");
+
+    private void ShowMessage(string msg, string type)
+    {
+        message = msg;
+        messageType = type;
+        InvokeAsync(async () =>
+        {
+            await Task.Delay(2500);
+            message = "";
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    public async void Dispose()
+    {
+        Scanner.OnBarcodeDetected -= OnBarcodeDetected;
+        await Scanner.StopScanningAsync();
+    }
+}

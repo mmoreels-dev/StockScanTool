@@ -1,0 +1,81 @@
+@page "/sales"
+@rendermode InteractiveServer
+@using StockScanTool.Web.Services
+@inject ApiClient Api
+
+<h3>Sales History</h3>
+
+<div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
+    <select @bind="filterStoreId" @bind:after="FilterChanged" style="padding:8px; border:1px solid #ddd; border-radius:4px;">
+        <option value="0">All Stores</option>
+        @foreach (var s in stores)
+        {
+            <option value="@s.Id">@s.Name</option>
+        }
+    </select>
+</div>
+
+@if (sales is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="data-table">
+        <thead>
+            <tr><th>ID</th><th>Store</th><th>Device</th><th>Items</th><th>Total</th><th>Date</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var s in sales)
+            {
+                <tr>
+                    <td>@s.Id</td>
+                    <td>@s.StoreName</td>
+                    <td>@s.DeviceName</td>
+                    <td>@s.Items.Sum(i => i.Quantity)</td>
+                    <td>@s.TotalAmount.ToString("C")</td>
+                    <td>@s.SaleDate.ToString("g")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="error-banner">@error</div>
+}
+
+@code {
+    private List<SaleTransactionDto>? sales;
+    private List<StoreDto> stores = new();
+    private int filterStoreId;
+    private string error = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            stores = await Api.GetStores();
+            sales = await Api.GetSales();
+        }
+        catch
+        {
+            error = "Could not connect to the API. Make sure the API server is running.";
+        }
+    }
+
+    private async Task FilterChanged()
+    {
+        try
+        {
+            sales = filterStoreId == 0
+                ? await Api.GetSales()
+                : await Api.GetSalesByStore(filterStoreId);
+        }
+        catch
+        {
+            error = "Could not connect to the API.";
+        }
+    }
+}

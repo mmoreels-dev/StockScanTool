@@ -1,0 +1,24 @@
+﻿@inherits LayoutComponentBase
+
+<div class="layout">
+    <nav class="sidebar">
+        <div class="sidebar-brand">
+            <h3>StockScanTool</h3>
+        </div>
+        <ul class="nav-menu">
+            <li><a href="/" class="nav-link">Dashboard</a></li>
+            <li><a href="/devices" class="nav-link">Devices</a></li>
+            <li><a href="/products" class="nav-link">Products</a></li>
+            <li><a href="/inventory" class="nav-link">Inventory</a></li>
+            <li><a href="/sales" class="nav-link">Sales</a></li>
+        </ul>
+    </nav>
+    <main class="content">
+        <div class="top-bar">
+            <h4>Admin Dashboard</h4>
+        </div>
+        <div class="page-body">
+            @Body
+        </div>
+    </main>
+</div>
