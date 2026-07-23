@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
+             x:Class="StockScanTool.Scanner.Views.ScannerPage"
+             Title="Scanner"
+             BackgroundColor="Black">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Top Bar -->
+        <Frame Grid.Row="0"
+               BackgroundColor="{StaticResource PrimaryColor}"
+               Padding="16,12"
+               CornerRadius="0"
+               HasShadow="True">
+            <Grid ColumnDefinitions="*,Auto">
+                <VerticalStackLayout Grid.Column="0">
+                    <Label Text="{Binding StoreName}"
+                           TextColor="White"
+                           FontSize="16"
+                           FontAttributes="Bold" />
+                    <Label Text="{Binding DeviceName}"
+                           TextColor="#aaaacc"
+                           FontSize="12" />
+                </VerticalStackLayout>
+                <Button Grid.Column="1"
+                        Text="Logout"
+                        TextColor="White"
+                        BackgroundColor="Transparent"
+                        FontSize="13"
+                        Clicked="OnLogoutClicked"
+                        VerticalOptions="Center" />
+            </Grid>
+        </Frame>
+
+        <!-- Camera + Overlay -->
+        <Grid Grid.Row="1">
+            <zxing:CameraBarcodeReaderView x:Name="BarcodeReader"
+                                            IsDetecting="True"
+                                            IsVisible="True" />
+
+            <!-- Scan feedback overlay -->
+            <Frame x:Name="ScanFeedback"
+                   BackgroundColor="{StaticResource PrimaryColor}"
+                   Opacity="0.9"
+                   IsVisible="False"
+                   CornerRadius="12"
+                   Padding="20"
+                   HorizontalOptions="Center"
+                   VerticalOptions="Center"
+                   WidthRequest="280">
+                <VerticalStackLayout Spacing="10">
+                    <Label x:Name="ScannedProductName"
+                           TextColor="White"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center" />
+                    <Label x:Name="ScannedProductPrice"
+                           TextColor="#7dcea0"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center" />
+                    <Label x:Name="ScannedProductMsg"
+                           TextColor="#ffcccc"
+                           FontSize="13"
+                           HorizontalOptions="Center"
+                           IsVisible="False" />
+                    <Button Text="Add to Cart"
+                            Style="{StaticResource PrimaryButton}"
+                            BackgroundColor="{StaticResource SuccessColor}"
+                            Clicked="OnAddToCartClicked"
+                            Margin="0,10,0,0" />
+                </VerticalStackLayout>
+            </Frame>
+        </Grid>
+
+        <!-- Bottom Cart Bar -->
+        <Frame Grid.Row="2"
+               BackgroundColor="White"
+               Padding="16,12"
+               CornerRadius="0"
+               HasShadow="True">
+            <Grid ColumnDefinitions="*,Auto">
+                <VerticalStackLayout Grid.Column="0">
+                    <Label Text="{Binding CartSummary}"
+                           TextColor="{StaticResource PrimaryColor}"
+                           FontSize="15"
+                           FontAttributes="Bold" />
+                    <Label Text="{Binding CartTotalText}"
+                           TextColor="{StaticResource SuccessColor}"
+                           FontSize="20"
+                           FontAttributes="Bold" />
+                </VerticalStackLayout>
+                <VerticalStackLayout Grid.Column="1" Spacing="6">
+                    <Button Text="View Cart"
+                            Style="{StaticResource PrimaryButton}"
+                            FontSize="13"
+                            Padding="16,8"
+                            Clicked="OnViewCartClicked" />
+                    <Button Text="Checkout"
+                            Style="{StaticResource PrimaryButton}"
+                            BackgroundColor="{StaticResource SuccessColor}"
+                            FontSize="13"
+                            Padding="16,8"
+                            IsEnabled="{Binding HasItems}"
+                            Clicked="OnCheckoutClicked" />
+                </VerticalStackLayout>
+            </Grid>
+        </Frame>
+
+    </Grid>
+
+</ContentPage>

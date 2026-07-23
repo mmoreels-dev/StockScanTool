@@ -1,0 +1,166 @@
+@page "/devices"
+@rendermode InteractiveServer
+@using StockScanTool.Web.Services
+@inject ApiClient Api
+
+<h3>Device Management</h3>
+
+@if (showForm)
+{
+    <div class="form-card">
+        <h4>@(editingId is null ? "Register New Device" : "Edit Device")</h4>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Device Name</label>
+                <input @bind="deviceName" placeholder="e.g. Scanner-01" />
+            </div>
+            <div class="form-group">
+                <label>Store</label>
+                <select @bind="storeId">
+                    <option value="0">-- Select Store --</option>
+                    @foreach (var s in stores)
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary" @onclick="Save" disabled="@(string.IsNullOrWhiteSpace(deviceName) || storeId == 0)">Save</button>
+            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+        </div>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <p class="error">@errorMessage</p>
+        }
+    </div>
+}
+
+@if (!showForm)
+{
+    <button class="btn btn-primary" @onclick="NewDevice">+ Add Device</button>
+}
+
+@if (devices is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Device Name</th>
+                <th>Store</th>
+                <th>API Key</th>
+                <th>Active</th>
+                <th>Last Ping</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var d in devices)
+            {
+                <tr>
+                    <td>@d.Id</td>
+                    <td>@d.DeviceName</td>
+                    <td>@d.StoreName</td>
+                    <td><code>@d.ApiKey</code></td>
+                    <td>@(d.IsActive ? "Yes" : "No")</td>
+                    <td>@(d.LastPing?.ToString("g") ?? "Never")</td>
+                    <td>
+                        <button class="btn btn-sm" @onclick="() => Edit(d)">Edit</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => Delete(d.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<DeviceDto>? devices;
+    private List<StoreDto> stores = new();
+    private bool showForm;
+    private int? editingId;
+    private string errorMessage = "";
+    private string deviceName = "";
+    private int storeId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            devices = await Api.GetDevices();
+            stores = await Api.GetStores();
+        }
+        catch
+        {
+            errorMessage = "Could not connect to the API. Make sure the API server is running.";
+        }
+    }
+
+    private void NewDevice()
+    {
+        editingId = null;
+        deviceName = "";
+        storeId = 0;
+        showForm = true;
+        errorMessage = "";
+    }
+
+    private void Edit(DeviceDto d)
+    {
+        editingId = d.Id;
+        deviceName = d.DeviceName;
+        storeId = d.StoreId;
+        showForm = true;
+        errorMessage = "";
+    }
+
+    private void Cancel()
+    {
+        showForm = false;
+        errorMessage = "";
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            if (editingId is null)
+            {
+                await Api.CreateDevice(new CreateDeviceRequest(deviceName, storeId));
+            }
+            else
+            {
+                await Api.UpdateDevice(editingId.Value, new UpdateDeviceRequest(deviceName, storeId, true));
+            }
+            showForm = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task Delete(int id)
+    {
+        try
+        {
+            await Api.DeleteDevice(id);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+}
