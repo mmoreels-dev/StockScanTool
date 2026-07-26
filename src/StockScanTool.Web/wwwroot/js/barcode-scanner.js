@@ -1,25 +1,17 @@
-console.log('barcode-scanner.js executing (v2)');
+console.log('barcode-scanner.js executing (copied to Web)');
 var barcodeScanner = {
     _scanner: null,
 
     start: async function (elementId, dotNetRef) {
-        console.log('barcodeScanner.start called for', elementId);
-        console.log('window.Html5QrcodeScanner:', !!window.Html5QrcodeScanner, 'window.Html5Qrcode:', !!window.Html5Qrcode);
-
         // Ensure the html5-qrcode library is available (check both names)
         if (!window.Html5QrcodeScanner && !window.Html5Qrcode) {
-            console.log('Loading html5-qrcode from CDN');
             var script = document.createElement('script');
             script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
             document.head.appendChild(script);
             await new Promise(function (resolve, reject) {
-                script.onload = function () {
-                    console.log('html5-qrcode script loaded');
-                    resolve();
-                };
+                script.onload = resolve;
                 script.onerror = function (e) { reject(new Error('Failed to load html5-qrcode script')); };
             });
-            console.log('After load:', !!window.Html5QrcodeScanner, !!window.Html5Qrcode);
         }
 
         try {
@@ -29,7 +21,6 @@ var barcodeScanner = {
         }
 
         var readerEl = document.getElementById(elementId);
-        console.log('readerEl found:', !!readerEl, readerEl);
         if (!readerEl) {
             try {
                 await dotNetRef.invokeMethodAsync('OnScannerDebug', 'Missing barcode reader element');
@@ -88,12 +79,10 @@ var barcodeScanner = {
             );
         }
 
-        console.log('Calling scanner.render');
         scanner.render(
             async function (decodedText) {
                 await scanner.clear();
                 barcodeScanner._scanner = null;
-                console.log('scan success', decodedText);
                 try {
                     await dotNetRef.invokeMethodAsync('OnBarcodeFound', decodedText);
                 } catch (e) {
@@ -103,7 +92,6 @@ var barcodeScanner = {
             async function (errorMessage) {
                 scanErrorCount = (scanErrorCount || 0) + 1;
                 if (!errorMessage?.includes('QR code parse error')) {
-                    console.log('scan error callback', errorMessage);
                     try {
                         await dotNetRef.invokeMethodAsync('OnScannerDebug', 'Scan error: ' + errorMessage);
                     } catch (e) { }

@@ -27,6 +27,10 @@ else
         <!-- Camera -->
         <div class="camera-container">
             <div id="barcode-reader"></div>
+            @if (!string.IsNullOrEmpty(scannerStatus))
+            {
+                <div class="scanner-status">@scannerStatus</div>
+            }
 
             @if (lastScan is not null && !showCart)
             {
@@ -113,10 +117,12 @@ else
     private bool showCart;
     private string message = "";
     private string messageType = "success";
+    private string scannerStatus = "Initializing scanner...";
 
     protected override Task OnInitializedAsync()
     {
         Scanner.OnBarcodeDetected += OnBarcodeDetected;
+        Scanner.ScannerDebugMessage += OnScannerDebug;
         return Task.CompletedTask;
     }
 
@@ -124,13 +130,18 @@ else
     {
         if (firstRender && Api.IsAuthenticated)
         {
+            scannerStatus = "Starting barcode scanner...";
+            await InvokeAsync(StateHasChanged);
             try
             {
                 await Scanner.StartScanningAsync("barcode-reader");
+                scannerStatus = "Scanner ready. Point the camera at a barcode.";
+                await InvokeAsync(StateHasChanged);
             }
             catch (Exception ex)
             {
-                ShowMessage($"Camera error: {ex.Message}", "error");
+                scannerStatus = $"Camera error: {ex.Message}";
+                ShowMessage(scannerStatus, "error");
             }
         }
     }
@@ -151,6 +162,12 @@ else
 
         lastScan = product;
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnScannerDebug(string message)
+    {
+        scannerStatus = message;
+        InvokeAsync(StateHasChanged);
     }
 
     private void AddToCart()

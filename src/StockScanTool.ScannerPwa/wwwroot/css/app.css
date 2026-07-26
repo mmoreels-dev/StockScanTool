@@ -155,6 +155,20 @@ body {
     object-fit: cover;
 }
 
+.scanner-status {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    text-align: center;
+    pointer-events: none;
+}
+
 /* Hide html5-qrcode UI elements we don't need */
 #barcode-reader img[alt="Info icon"],
 #barcode-reader__dashboard_section,

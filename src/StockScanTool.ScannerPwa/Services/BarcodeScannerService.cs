@@ -8,6 +8,7 @@ public class BarcodeScannerService : IAsyncDisposable
     private DotNetObjectReference<BarcodeScannerService>? _dotNetRef;
 
     public event Action<string>? OnBarcodeDetected;
+    public event Action<string>? ScannerDebugMessage;
     public bool IsScanning { get; private set; }
 
     public BarcodeScannerService(IJSRuntime js) => _js = js;
@@ -33,6 +34,12 @@ public class BarcodeScannerService : IAsyncDisposable
     public void OnBarcodeFound(string barcode)
     {
         OnBarcodeDetected?.Invoke(barcode);
+    }
+
+    [JSInvokable]
+    public void OnScannerDebug(string message)
+    {
+        ScannerDebugMessage?.Invoke(message);
     }
 
     public async ValueTask DisposeAsync()
