@@ -1,6 +1,23 @@
-@StockScanTool.Api_HostAddress = http://localhost:5037
+@StockScanTool.Api_HostAddress = http://localhost:5168
 
-GET {{StockScanTool.Api_HostAddress}}/weatherforecast/
+### Get all stores
+GET {{StockScanTool.Api_HostAddress}}/api/v1/stores
 Accept: application/json
+
+### Get all products
+GET {{StockScanTool.Api_HostAddress}}/api/v1/products
+Accept: application/json
+
+### Get dashboard
+GET {{StockScanTool.Api_HostAddress}}/api/v1/dashboard
+Accept: application/json
+
+### Device login
+POST {{StockScanTool.Api_HostAddress}}/api/v1/auth/device-login
+Content-Type: application/json
+
+{
+  "apiKey": "test-api-key"
+}
 
 ###

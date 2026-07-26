@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
+using StockScanTool.Api.Middleware;
 using StockScanTool.Api.Services;
+using StockScanTool.Application.Services;
 using StockScanTool.Infrastructure;
 using StockScanTool.Infrastructure.Data;
 using System.Text;
@@ -16,7 +19,7 @@ builder.WebHost.ConfigureKestrel(options =>
         options.ListenAnyIP(5168);
         options.ListenAnyIP(5169, listenOptions =>
         {
-            listenOptions.UseHttps(certPath, "stock123");
+            listenOptions.UseHttps(certPath, builder.Configuration["HttpsCertPassword"] ?? "stock123");
         });
     }
     else
@@ -33,8 +36,10 @@ var connectionString = useSqlite
 
 builder.Services.AddInfrastructure(connectionString, useSqlite);
 
-// --- JWT Authentication ---
+// --- JWT Settings ---
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 var jwtKey = builder.Configuration["JwtSettings:SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured.");
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -51,38 +56,48 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
-// --- Services ---
+// --- Application Services ---
 builder.Services.AddScoped<IStoreService, StoreService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IDeviceService, DeviceService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ISaleService, SaleService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<AuthService>();
 
-// --- Controllers + Swagger ---
+// --- Controllers + OpenAPI ---
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+builder.Services.AddOpenApi(options =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "StockScanTool API", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    options.AddDocumentTransformer((document, context, ct) =>
     {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Enter your JWT token"
-    });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
+        document.Info = new OpenApiInfo { Title = "StockScanTool API", Version = "v1" };
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
         {
-            new OpenApiSecurityScheme
+            Name = "Authorization",
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "Enter your JWT token"
+        };
+        return Task.CompletedTask;
+    });
+    options.AddOperationTransformer((operation, context, ct) =>
+    {
+        operation.Security ??= new List<OpenApiSecurityRequirement>();
+        operation.Security.Add(new OpenApiSecurityRequirement
+        {
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
-            Array.Empty<string>()
-        }
+                new OpenApiSecuritySchemeReference("Bearer"),
+                new List<string>()
+            }
+        });
+        return Task.CompletedTask;
     });
 });
 
@@ -106,10 +121,16 @@ using (var scope = app.Services.CreateScope())
 }
 
 // --- Pipeline ---
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "StockScanTool API v1");
+        options.RoutePrefix = "swagger";
+    });
 }
 
 app.UseCors();

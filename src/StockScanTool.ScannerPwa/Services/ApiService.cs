@@ -1,76 +1,36 @@
-using System.Net.Http.Json;
 using StockScanTool.Contracts;
+using StockScanTool.Shared.Services;
 
 namespace StockScanTool.ScannerPwa.Services;
 
 public class ApiService
 {
-    private readonly HttpClient _http;
-    private string _token = string.Empty;
+    private readonly DeviceAuthService _auth;
+    private readonly ProductLookupService _lookup;
+    private readonly SaleSubmissionService _sale;
 
-    public ApiService(HttpClient http) => _http = http;
-
-    public int DeviceId { get; private set; }
-    public int StoreId { get; private set; }
-    public string StoreName { get; private set; } = "";
-    public string DeviceName { get; private set; } = "";
-    public bool IsAuthenticated => !string.IsNullOrEmpty(_token);
-
-    public void SetBaseUrl(string url)
+    public ApiService(HttpClient http)
     {
-        _http.BaseAddress = new Uri(url.TrimEnd('/') + "/");
+        _auth = new DeviceAuthService(http);
+        _lookup = new ProductLookupService(http);
+        _sale = new SaleSubmissionService(http);
     }
 
-    public async Task<bool> LoginAsync(string apiKey)
-    {
-        try
-        {
-            var resp = await _http.PostAsJsonAsync("api/devices/login", new DeviceLoginRequest(apiKey));
-            if (!resp.IsSuccessStatusCode) return false;
+    public int DeviceId => _auth.DeviceId;
+    public int StoreId => _auth.StoreId;
+    public string StoreName => _auth.StoreName;
+    public string DeviceName => _auth.DeviceName;
+    public bool IsAuthenticated => _auth.IsAuthenticated;
 
-            var result = await resp.Content.ReadFromJsonAsync<DeviceLoginResponse>();
-            if (result is null) return false;
+    public void SetBaseUrl(string url) => _auth.SetBaseUrl(url);
 
-            _token = result.Token;
-            DeviceId = result.DeviceId;
-            StoreId = result.StoreId;
-            StoreName = result.StoreName;
-            DeviceName = result.DeviceName;
-            return true;
-        }
-        catch { return false; }
-    }
+    public Task<bool> LoginAsync(string apiKey) => _auth.LoginAsync(apiKey);
 
-    public async Task<BarcodeLookupResponse?> LookupBarcodeAsync(string barcode)
-    {
-        try
-        {
-            return await _http.GetFromJsonAsync<BarcodeLookupResponse>(
-                $"api/sales/lookup/{barcode}?storeId={StoreId}");
-        }
-        catch { return null; }
-    }
+    public Task<BarcodeLookupResponse?> LookupBarcodeAsync(string barcode)
+        => _lookup.LookupBarcodeAsync(barcode, _auth.StoreId);
 
-    public async Task<SaleTransactionResponse?> SubmitSaleAsync(List<CartItem> cart)
-    {
-        try
-        {
-            var request = new SubmitSaleRequest(StoreId, DeviceId,
-                cart.Select(c => new SubmitSaleItemRequest(c.ProductId, c.Quantity)).ToList());
+    public Task<SaleTransactionDto?> SubmitSaleAsync(List<CartItem> cart)
+        => _sale.SubmitSaleAsync(_auth.StoreId, _auth.DeviceId, cart);
 
-            var resp = await _http.PostAsJsonAsync("api/sales", request);
-            if (!resp.IsSuccessStatusCode) return null;
-            return await resp.Content.ReadFromJsonAsync<SaleTransactionResponse>();
-        }
-        catch { return null; }
-    }
-
-    public void Logout()
-    {
-        _token = string.Empty;
-        DeviceId = 0;
-        StoreId = 0;
-        StoreName = "";
-        DeviceName = "";
-    }
+    public void Logout() => _auth.Logout();
 }

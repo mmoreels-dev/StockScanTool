@@ -1,70 +1,46 @@
-using Microsoft.EntityFrameworkCore;
+using StockScanTool.Application.Repositories;
+using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
-using StockScanTool.Infrastructure.Data;
+using StockScanTool.Domain.Entities;
 
 namespace StockScanTool.Api.Services;
 
-public class ProductService : IProductService
+public class ProductService : CrudService<Product, ProductDto, CreateProductRequest, UpdateProductRequest>, IProductService
 {
-    private readonly AppDbContext _db;
+    private readonly IProductRepository _productRepo;
 
-    public ProductService(AppDbContext db) => _db = db;
-
-    public async Task<List<ProductDto>> GetAllAsync()
+    public ProductService(IProductRepository repo, IUnitOfWork unitOfWork)
+        : base(repo, unitOfWork)
     {
-        return await _db.Products
-            .OrderBy(p => p.Name)
-            .Select(p => new ProductDto(p.Id, p.Sku, p.Name, p.Description, p.Barcode, p.Price))
-            .ToListAsync();
+        _productRepo = repo;
     }
 
-    public async Task<ProductDto?> GetByIdAsync(int id)
+    protected override System.Linq.Expressions.Expression<Func<Product, bool>> IdPredicate(int id)
+        => p => p.Id == id;
+
+    protected override ProductDto ToDto(Product p) => EntityMapper.ToDto(p);
+
+    protected override Product ToEntity(CreateProductRequest r)
+        => new() { Sku = r.Sku, Name = r.Name, Description = r.Description, Barcode = r.Barcode, Price = r.Price };
+
+    protected override void UpdateEntity(Product p, UpdateProductRequest r)
     {
-        var p = await _db.Products.FindAsync(id);
-        return p is null ? null : new ProductDto(p.Id, p.Sku, p.Name, p.Description, p.Barcode, p.Price);
+        p.Sku = r.Sku;
+        p.Name = r.Name;
+        p.Description = r.Description;
+        p.Barcode = r.Barcode;
+        p.Price = r.Price;
     }
 
     public async Task<ProductDto?> GetByBarcodeAsync(string barcode)
     {
-        var p = await _db.Products.FirstOrDefaultAsync(x => x.Barcode == barcode);
-        return p is null ? null : new ProductDto(p.Id, p.Sku, p.Name, p.Description, p.Barcode, p.Price);
+        var product = await _productRepo.GetByBarcodeAsync(barcode);
+        return product is null ? null : ToDto(product);
     }
 
-    public async Task<ProductDto> CreateAsync(CreateProductRequest request)
+    public async Task<ProductDto?> GetBySkuAsync(string sku)
     {
-        var product = new Domain.Entities.Product
-        {
-            Sku = request.Sku,
-            Name = request.Name,
-            Description = request.Description,
-            Barcode = request.Barcode,
-            Price = request.Price
-        };
-        _db.Products.Add(product);
-        await _db.SaveChangesAsync();
-        return new ProductDto(product.Id, product.Sku, product.Name, product.Description, product.Barcode, product.Price);
-    }
-
-    public async Task<ProductDto?> UpdateAsync(int id, UpdateProductRequest request)
-    {
-        var product = await _db.Products.FindAsync(id);
-        if (product is null) return null;
-
-        product.Sku = request.Sku;
-        product.Name = request.Name;
-        product.Description = request.Description;
-        product.Barcode = request.Barcode;
-        product.Price = request.Price;
-        await _db.SaveChangesAsync();
-        return new ProductDto(product.Id, product.Sku, product.Name, product.Description, product.Barcode, product.Price);
-    }
-
-    public async Task<bool> DeleteAsync(int id)
-    {
-        var product = await _db.Products.FindAsync(id);
-        if (product is null) return false;
-        _db.Products.Remove(product);
-        await _db.SaveChangesAsync();
-        return true;
+        var product = await _productRepo.GetBySkuAsync(sku);
+        return product is null ? null : ToDto(product);
     }
 }

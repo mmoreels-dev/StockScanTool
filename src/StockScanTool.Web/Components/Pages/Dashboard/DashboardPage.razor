@@ -38,7 +38,7 @@ else if (summary is not null)
     <div class="panels">
         <div class="panel">
             <h4>Sales by Store</h4>
-            @if (summary.SalesByStore.Any())
+            @if (summary.SalesByStore?.Any() == true)
             {
                 <table class="data-table">
                     <thead><tr><th>Store</th><th>Transactions</th><th>Revenue</th></tr></thead>
@@ -62,7 +62,7 @@ else if (summary is not null)
 
         <div class="panel">
             <h4>Stock Levels</h4>
-            @if (summary.StockLevels.Any())
+            @if (summary.StockLevels?.Any() == true)
             {
                 <table class="data-table">
                     <thead><tr><th>Product</th><th>Store</th><th>Qty</th></tr></thead>

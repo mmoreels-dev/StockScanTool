@@ -1,18 +1,18 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
-using StockScanTool.Api.Services;
 
 namespace StockScanTool.Api.Controllers;
 
-[ApiController]
-[Route("api/[controller]")]
-public class DashboardController : ControllerBase
+[Authorize]
+public class DashboardController : BaseController
 {
-    private readonly ISaleService _service;
+    private readonly IDashboardService _service;
 
-    public DashboardController(ISaleService service) => _service = service;
+    public DashboardController(IDashboardService service) => _service = service;
 
     [HttpGet]
-    public async Task<ActionResult<DashboardSummaryDto>> GetSummary()
-        => Ok(await _service.GetDashboardAsync());
+    public async Task<ActionResult<ApiResponse<DashboardSummaryDto>>> GetSummary()
+        => Ok(ApiResponse<DashboardSummaryDto>.Ok(await _service.GetSummaryAsync()));
 }

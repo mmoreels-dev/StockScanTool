@@ -1,24 +1,96 @@
 ﻿@inherits LayoutComponentBase
+@using StockScanTool.Web.Services
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
-<div class="layout">
-    <nav class="sidebar">
-        <div class="sidebar-brand">
-            <h3>StockScanTool</h3>
+@if (_isLoginRoute)
+{
+    @Body
+}
+else if (!Api.IsAuthenticated)
+{
+    <div class="login-container">
+        <div class="login-card">
+            <p>Redirecting to login...</p>
         </div>
-        <ul class="nav-menu">
-            <li><a href="/" class="nav-link">Dashboard</a></li>
-            <li><a href="/devices" class="nav-link">Devices</a></li>
-            <li><a href="/products" class="nav-link">Products</a></li>
-            <li><a href="/inventory" class="nav-link">Inventory</a></li>
-            <li><a href="/sales" class="nav-link">Sales</a></li>
-        </ul>
-    </nav>
-    <main class="content">
-        <div class="top-bar">
-            <h4>Admin Dashboard</h4>
-        </div>
-        <div class="page-body">
-            @Body
-        </div>
-    </main>
-</div>
+    </div>
+}
+else
+{
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-brand">
+                <h3>StockScanTool</h3>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="nav-link">Dashboard</a></li>
+                <li><a href="/devices" class="nav-link">Devices</a></li>
+                <li><a href="/products" class="nav-link">Products</a></li>
+                <li><a href="/inventory" class="nav-link">Inventory</a></li>
+                <li><a href="/sales" class="nav-link">Sales</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <button class="btn btn-logout" @onclick="HandleLogout">Logout</button>
+            </div>
+        </nav>
+        <main class="content">
+            <div class="top-bar">
+                <h4>Admin Dashboard</h4>
+            </div>
+            <div class="page-body">
+                @Body
+            </div>
+        </main>
+    </div>
+}
+
+@code {
+    private bool _isLoginRoute;
+    private bool _tokenFromUrl;
+
+    protected override void OnInitialized()
+    {
+        var uri = new Uri(Nav.Uri);
+        _isLoginRoute = uri.AbsolutePath.TrimStart('/').Equals("login", StringComparison.OrdinalIgnoreCase);
+
+        if (_isLoginRoute)
+            return;
+
+        if (!Api.IsAuthenticated)
+        {
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            var token = query["token"];
+            if (!string.IsNullOrEmpty(token))
+            {
+                Api.SetToken(token);
+                _tokenFromUrl = true;
+                return;
+            }
+
+            Nav.NavigateTo("/login", forceLoad: true);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_tokenFromUrl)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("history.replaceState", null, "", "/");
+                _tokenFromUrl = false;
+            }
+            catch
+            {
+                // JS not available during prerender, will retry on next render
+            }
+        }
+    }
+
+    private void HandleLogout()
+    {
+        Api.Logout();
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+}

@@ -1,60 +1,27 @@
-using Microsoft.EntityFrameworkCore;
+using StockScanTool.Application.Repositories;
+using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
-using StockScanTool.Infrastructure.Data;
+using StockScanTool.Domain.Entities;
 
 namespace StockScanTool.Api.Services;
 
-public class StoreService : IStoreService
+public class StoreService : CrudService<Store, StoreDto, CreateStoreRequest, UpdateStoreRequest>, IStoreService
 {
-    private readonly AppDbContext _db;
+    public StoreService(IStoreRepository repo, IUnitOfWork unitOfWork)
+        : base(repo, unitOfWork) { }
 
-    public StoreService(AppDbContext db) => _db = db;
+    protected override System.Linq.Expressions.Expression<Func<Store, bool>> IdPredicate(int id)
+        => s => s.Id == id;
 
-    public async Task<List<StoreDto>> GetAllAsync()
+    protected override StoreDto ToDto(Store s) => EntityMapper.ToDto(s);
+
+    protected override Store ToEntity(CreateStoreRequest r)
+        => new() { Name = r.Name, Address = r.Address, IsActive = r.IsActive };
+
+    protected override void UpdateEntity(Store s, UpdateStoreRequest r)
     {
-        return await _db.Stores
-            .OrderBy(s => s.Name)
-            .Select(s => new StoreDto(s.Id, s.Name, s.Address, s.IsActive))
-            .ToListAsync();
-    }
-
-    public async Task<StoreDto?> GetByIdAsync(int id)
-    {
-        var s = await _db.Stores.FindAsync(id);
-        return s is null ? null : new StoreDto(s.Id, s.Name, s.Address, s.IsActive);
-    }
-
-    public async Task<StoreDto> CreateAsync(CreateStoreRequest request)
-    {
-        var store = new Domain.Entities.Store
-        {
-            Name = request.Name,
-            Address = request.Address,
-            IsActive = request.IsActive
-        };
-        _db.Stores.Add(store);
-        await _db.SaveChangesAsync();
-        return new StoreDto(store.Id, store.Name, store.Address, store.IsActive);
-    }
-
-    public async Task<StoreDto?> UpdateAsync(int id, UpdateStoreRequest request)
-    {
-        var store = await _db.Stores.FindAsync(id);
-        if (store is null) return null;
-
-        store.Name = request.Name;
-        store.Address = request.Address;
-        store.IsActive = request.IsActive;
-        await _db.SaveChangesAsync();
-        return new StoreDto(store.Id, store.Name, store.Address, store.IsActive);
-    }
-
-    public async Task<bool> DeleteAsync(int id)
-    {
-        var store = await _db.Stores.FindAsync(id);
-        if (store is null) return false;
-        _db.Stores.Remove(store);
-        await _db.SaveChangesAsync();
-        return true;
+        s.Name = r.Name;
+        s.Address = r.Address;
+        s.IsActive = r.IsActive;
     }
 }

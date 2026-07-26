@@ -1,48 +1,93 @@
-using System.Net.Http.Json;
 using StockScanTool.Contracts;
+using Microsoft.JSInterop;
 
 namespace StockScanTool.Web.Services;
 
 public class ApiClient
 {
     private readonly HttpClient _http;
+    private string? _token;
 
     public ApiClient(HttpClient http) => _http = http;
 
-    // --- Stores ---
-    public Task<List<StoreDto>> GetStores() => GetAsync<List<StoreDto>>("api/stores")!;
-    public Task<StoreDto?> GetStore(int id) => GetAsync<StoreDto>($"api/stores/{id}");
-    public Task<StoreDto> CreateStore(CreateStoreRequest r) => PostAsync<StoreDto, CreateStoreRequest>("api/stores", r);
-    public Task<StoreDto?> UpdateStore(int id, UpdateStoreRequest r) => PutAsync<StoreDto, UpdateStoreRequest>($"api/stores/{id}", r);
-    public Task DeleteStore(int id) => DeleteAsync($"api/stores/{id}");
+    public bool IsAuthenticated => !string.IsNullOrEmpty(_token);
 
-    // --- Products ---
-    public Task<List<ProductDto>> GetProducts() => GetAsync<List<ProductDto>>("api/products")!;
-    public Task<ProductDto?> GetProduct(int id) => GetAsync<ProductDto>($"api/products/{id}");
-    public Task<ProductDto> CreateProduct(CreateProductRequest r) => PostAsync<ProductDto, CreateProductRequest>("api/products", r);
-    public Task<ProductDto?> UpdateProduct(int id, UpdateProductRequest r) => PutAsync<ProductDto, UpdateProductRequest>($"api/products/{id}", r);
-    public Task DeleteProduct(int id) => DeleteAsync($"api/products/{id}");
+    public void SetToken(string token)
+    {
+        _token = token;
+        _http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+    }
 
-    // --- Devices ---
-    public Task<List<DeviceDto>> GetDevices() => GetAsync<List<DeviceDto>>("api/devices")!;
-    public Task<DeviceDto?> GetDevice(int id) => GetAsync<DeviceDto>($"api/devices/{id}");
-    public Task<DeviceDto> CreateDevice(CreateDeviceRequest r) => PostAsync<DeviceDto, CreateDeviceRequest>("api/devices", r);
-    public Task<DeviceDto?> UpdateDevice(int id, UpdateDeviceRequest r) => PutAsync<DeviceDto, UpdateDeviceRequest>($"api/devices/{id}", r);
-    public Task DeleteDevice(int id) => DeleteAsync($"api/devices/{id}");
+    public void Logout()
+    {
+        _token = null;
+        _http.DefaultRequestHeaders.Authorization = null;
+    }
 
-    // --- Inventory ---
-    public Task<List<InventoryDto>> GetInventory() => GetAsync<List<InventoryDto>>("api/inventory")!;
-    public Task<List<InventoryDto>> GetInventoryByStore(int storeId) => GetAsync<List<InventoryDto>>($"api/inventory/store/{storeId}")!;
-    public Task<InventoryDto> UpsertInventory(UpdateInventoryRequest r) => PostAsync<InventoryDto, UpdateInventoryRequest>("api/inventory", r);
+    public async Task<List<StoreDto>> GetStores()
+        => await GetAsync<List<StoreDto>>(ApiRoutes.Stores.Base) ?? [];
 
-    // --- Sales ---
-    public Task<List<SaleTransactionDto>> GetSales() => GetAsync<List<SaleTransactionDto>>("api/sales")!;
-    public Task<List<SaleTransactionDto>> GetSalesByStore(int storeId) => GetAsync<List<SaleTransactionDto>>($"api/sales/store/{storeId}")!;
+    public async Task<StoreDto?> GetStore(int id)
+        => await GetAsync<StoreDto>($"{ApiRoutes.Stores.Base}/{id}");
 
-    // --- Dashboard ---
-    public Task<DashboardSummaryDto> GetDashboard() => GetAsync<DashboardSummaryDto>("api/dashboard")!;
+    public async Task<StoreDto> CreateStore(CreateStoreRequest r)
+        => (await PostAsync<StoreDto, CreateStoreRequest>(ApiRoutes.Stores.Base, r))!;
 
-    // --- Helpers ---
+    public async Task<StoreDto?> UpdateStore(int id, UpdateStoreRequest r)
+        => await PutAsync<StoreDto, UpdateStoreRequest>($"{ApiRoutes.Stores.Base}/{id}", r);
+
+    public async Task DeleteStore(int id)
+        => await DeleteAsync($"{ApiRoutes.Stores.Base}/{id}");
+
+    public async Task<List<ProductDto>> GetProducts()
+        => await GetAsync<List<ProductDto>>(ApiRoutes.Products.Base) ?? [];
+
+    public async Task<ProductDto?> GetProduct(int id)
+        => await GetAsync<ProductDto>($"{ApiRoutes.Products.Base}/{id}");
+
+    public async Task<ProductDto> CreateProduct(CreateProductRequest r)
+        => (await PostAsync<ProductDto, CreateProductRequest>(ApiRoutes.Products.Base, r))!;
+
+    public async Task<ProductDto?> UpdateProduct(int id, UpdateProductRequest r)
+        => await PutAsync<ProductDto, UpdateProductRequest>($"{ApiRoutes.Products.Base}/{id}", r);
+
+    public async Task DeleteProduct(int id)
+        => await DeleteAsync($"{ApiRoutes.Products.Base}/{id}");
+
+    public async Task<List<DeviceDto>> GetDevices()
+        => await GetAsync<List<DeviceDto>>(ApiRoutes.Devices.Base) ?? [];
+
+    public async Task<DeviceDto?> GetDevice(int id)
+        => await GetAsync<DeviceDto>($"{ApiRoutes.Devices.Base}/{id}");
+
+    public async Task<DeviceDto> CreateDevice(CreateDeviceRequest r)
+        => (await PostAsync<DeviceDto, CreateDeviceRequest>(ApiRoutes.Devices.Base, r))!;
+
+    public async Task<DeviceDto?> UpdateDevice(int id, UpdateDeviceRequest r)
+        => await PutAsync<DeviceDto, UpdateDeviceRequest>($"{ApiRoutes.Devices.Base}/{id}", r);
+
+    public async Task DeleteDevice(int id)
+        => await DeleteAsync($"{ApiRoutes.Devices.Base}/{id}");
+
+    public async Task<List<InventoryDto>> GetInventory()
+        => await GetAsync<List<InventoryDto>>(ApiRoutes.Inventory.Base) ?? [];
+
+    public async Task<List<InventoryDto>> GetInventoryByStore(int storeId)
+        => await GetAsync<List<InventoryDto>>($"{ApiRoutes.Inventory.Base}/store/{storeId}") ?? [];
+
+    public async Task<InventoryDto> UpsertInventory(UpdateInventoryRequest r)
+        => (await PutAsync<InventoryDto, UpdateInventoryRequest>(ApiRoutes.Inventory.Base, r))!;
+
+    public async Task<List<SaleTransactionDto>> GetSales()
+        => await GetAsync<List<SaleTransactionDto>>(ApiRoutes.Sales.Base) ?? [];
+
+    public async Task<List<SaleTransactionDto>> GetSalesByStore(int storeId)
+        => await GetAsync<List<SaleTransactionDto>>($"{ApiRoutes.Sales.Base}/store/{storeId}") ?? [];
+
+    public async Task<DashboardSummaryDto> GetDashboard()
+        => (await GetAsync<DashboardSummaryDto>(ApiRoutes.Dashboard.Base))!;
+
     private async Task<T?> GetAsync<T>(string url)
     {
         var resp = await _http.GetAsync(url);
@@ -50,11 +95,11 @@ public class ApiClient
         return await resp.Content.ReadFromJsonAsync<T>();
     }
 
-    private async Task<TOut> PostAsync<TOut, TIn>(string url, TIn body)
+    private async Task<TOut?> PostAsync<TOut, TIn>(string url, TIn body)
     {
         var resp = await _http.PostAsJsonAsync(url, body);
         resp.EnsureSuccessStatusCode();
-        return (await resp.Content.ReadFromJsonAsync<TOut>())!;
+        return await resp.Content.ReadFromJsonAsync<TOut>();
     }
 
     private async Task<TOut?> PutAsync<TOut, TIn>(string url, TIn body)

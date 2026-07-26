@@ -1,95 +1,83 @@
-using Microsoft.EntityFrameworkCore;
+using StockScanTool.Application.Repositories;
+using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
-using StockScanTool.Infrastructure.Data;
+using StockScanTool.Domain.Entities;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace StockScanTool.Api.Services;
 
-public class DeviceService : IDeviceService
+public class DeviceService : CrudService<ScanningDevice, DeviceDto, CreateDeviceRequest, UpdateDeviceRequest>, IDeviceService
 {
-    private readonly AppDbContext _db;
-    private readonly IJwtTokenService _jwt;
+    private readonly IScanningDeviceRepository _deviceRepo;
+    private readonly IStoreRepository _storeRepo;
 
-    public DeviceService(AppDbContext db, IJwtTokenService jwt)
+    public DeviceService(
+        IScanningDeviceRepository deviceRepo,
+        IStoreRepository storeRepo,
+        IUnitOfWork unitOfWork)
+        : base(deviceRepo, unitOfWork)
     {
-        _db = db;
-        _jwt = jwt;
+        _deviceRepo = deviceRepo;
+        _storeRepo = storeRepo;
     }
 
-    public async Task<List<DeviceDto>> GetAllAsync()
+    protected override System.Linq.Expressions.Expression<Func<ScanningDevice, bool>> IdPredicate(int id)
+        => d => d.Id == id;
+
+    protected override DeviceDto ToDto(ScanningDevice d)
     {
-        return await _db.ScanningDevices
-            .Include(d => d.Store)
-            .OrderBy(d => d.DeviceName)
-            .Select(d => new DeviceDto(
-                d.Id, d.DeviceName, d.StoreId, d.Store.Name,
-                d.ApiKey, d.IsActive, d.LastPing))
-            .ToListAsync();
+        var storeName = _storeRepo.GetByIdAsync(d.StoreId).GetAwaiter().GetResult()?.Name ?? string.Empty;
+        return EntityMapper.ToDto(d, storeName);
     }
 
-    public async Task<DeviceDto?> GetByIdAsync(int id)
-    {
-        var d = await _db.ScanningDevices.Include(x => x.Store).FirstOrDefaultAsync(x => x.Id == id);
-        return d is null ? null : new DeviceDto(
-            d.Id, d.DeviceName, d.StoreId, d.Store.Name,
-            d.ApiKey, d.IsActive, d.LastPing);
-    }
-
-    public async Task<DeviceDto> CreateAsync(CreateDeviceRequest request)
-    {
-        var device = new Domain.Entities.ScanningDevice
+    protected override ScanningDevice ToEntity(CreateDeviceRequest r)
+        => new()
         {
-            DeviceName = request.DeviceName,
-            StoreId = request.StoreId,
+            DeviceName = r.DeviceName,
+            StoreId = r.StoreId,
             ApiKey = GenerateApiKey(),
             IsActive = true
         };
-        _db.ScanningDevices.Add(device);
-        await _db.SaveChangesAsync();
 
-        var storeName = await _db.Stores.Where(s => s.Id == request.StoreId).Select(s => s.Name).FirstAsync();
-        return new DeviceDto(device.Id, device.DeviceName, device.StoreId, storeName, device.ApiKey, device.IsActive, device.LastPing);
+    protected override void UpdateEntity(ScanningDevice d, UpdateDeviceRequest r)
+    {
+        d.DeviceName = r.DeviceName;
+        d.StoreId = r.StoreId;
+        d.IsActive = r.IsActive;
     }
 
-    public async Task<DeviceDto?> UpdateAsync(int id, UpdateDeviceRequest request)
+    public override async Task<DeviceDto> CreateAsync(CreateDeviceRequest request)
     {
-        var device = await _db.ScanningDevices.FindAsync(id);
-        if (device is null) return null;
+        var entity = ToEntity(request);
+        await _deviceRepo.AddAsync(entity);
+        await _unitOfWork.SaveChangesAsync();
 
-        device.DeviceName = request.DeviceName;
-        device.StoreId = request.StoreId;
-        device.IsActive = request.IsActive;
-        await _db.SaveChangesAsync();
-        return await GetByIdAsync(id);
+        var storeName = (await _storeRepo.GetByIdAsync(request.StoreId))?.Name ?? string.Empty;
+        return EntityMapper.ToDto(entity, storeName);
     }
 
-    public async Task<bool> DeleteAsync(int id)
+    public override async Task<DeviceDto?> UpdateAsync(int id, UpdateDeviceRequest request)
     {
-        var device = await _db.ScanningDevices.FindAsync(id);
-        if (device is null) return false;
-        _db.ScanningDevices.Remove(device);
-        await _db.SaveChangesAsync();
-        return true;
+        var entity = await _deviceRepo.GetByIdAsync(id);
+        if (entity is null) return null;
+
+        UpdateEntity(entity, request);
+        await _unitOfWork.SaveChangesAsync();
+
+        var storeName = (await _storeRepo.GetByIdAsync(request.StoreId))?.Name ?? string.Empty;
+        return EntityMapper.ToDto(entity, storeName);
     }
 
-    public async Task<DeviceLoginResponse?> LoginAsync(DeviceLoginRequest request)
+    public override async Task<List<DeviceDto>> GetAllAsync()
     {
-        var device = await _db.ScanningDevices
-            .Include(d => d.Store)
-            .FirstOrDefaultAsync(d => d.ApiKey == request.ApiKey && d.IsActive);
-
-        if (device is null) return null;
-
-        device.LastPing = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-
-        var token = _jwt.GenerateDeviceToken(device.Id, device.StoreId);
-
-        return new DeviceLoginResponse(
-            device.Id, device.DeviceName,
-            device.StoreId, device.Store.Name,
-            token);
+        var entities = await _deviceRepo.GetAllAsync();
+        var result = new List<DeviceDto>();
+        foreach (var d in entities)
+        {
+            var storeName = (await _storeRepo.GetByIdAsync(d.StoreId))?.Name ?? string.Empty;
+            result.Add(EntityMapper.ToDto(d, storeName));
+        }
+        return result;
     }
 
     private static string GenerateApiKey()

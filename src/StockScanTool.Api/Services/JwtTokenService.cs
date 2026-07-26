@@ -1,21 +1,25 @@
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using StockScanTool.Application.Services;
 
 namespace StockScanTool.Api.Services;
 
-public interface IJwtTokenService
+public class JwtSettings
 {
-    string GenerateDeviceToken(int deviceId, int storeId);
-    string GenerateAdminToken();
+    public string SecretKey { get; set; } = string.Empty;
+    public string Issuer { get; set; } = string.Empty;
+    public string Audience { get; set; } = string.Empty;
+    public int ExpirationInMinutes { get; set; } = 1440;
 }
 
 public class JwtTokenService : IJwtTokenService
 {
-    private readonly IConfiguration _config;
+    private readonly JwtSettings _settings;
 
-    public JwtTokenService(IConfiguration config) => _config = config;
+    public JwtTokenService(IOptions<JwtSettings> settings) => _settings = settings.Value;
 
     public string GenerateDeviceToken(int deviceId, int storeId)
     {
@@ -41,16 +45,17 @@ public class JwtTokenService : IJwtTokenService
     private string GenerateToken(Claim[] claims)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
-            _config["JwtSettings:SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured")));
+            string.IsNullOrEmpty(_settings.SecretKey)
+                ? throw new InvalidOperationException("JWT SecretKey not configured.")
+                : _settings.SecretKey));
 
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
-            issuer: _config["JwtSettings:Issuer"],
-            audience: _config["JwtSettings:Audience"],
+            issuer: _settings.Issuer,
+            audience: _settings.Audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(
-                _config.GetValue<int>("JwtSettings:ExpirationInMinutes", 1440)),
+            expires: DateTime.UtcNow.AddMinutes(_settings.ExpirationInMinutes),
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

@@ -1,6 +1,6 @@
 using StockScanTool.Contracts;
 
-namespace StockScanTool.Api.Services;
+namespace StockScanTool.Application.Services;
 
 public interface IInventoryService
 {
@@ -8,4 +8,5 @@ public interface IInventoryService
     Task<List<InventoryDto>> GetByStoreAsync(int storeId);
     Task<InventoryDto?> GetByIdAsync(int id);
     Task<InventoryDto> UpsertAsync(UpdateInventoryRequest request);
+    Task<bool> DecrementStockAsync(int productId, int storeId, int quantity);
 }

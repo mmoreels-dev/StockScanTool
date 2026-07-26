@@ -26,12 +26,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="ZXing.Net.Maui.Controls" Version="0.4.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="ZXing.Net.Maui.Controls" Version="0.10.3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\StockScanTool.Contracts\StockScanTool.Contracts.csproj" />
+    <ProjectReference Include="..\StockScanTool.Shared\StockScanTool.Shared.csproj" />
   </ItemGroup>
 
 </Project>
