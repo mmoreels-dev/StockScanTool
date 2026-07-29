@@ -1,36 +1,19 @@
 ﻿@page "/Error"
-@using System.Diagnostics
+@inject NavigationManager Nav
 
-<PageTitle>Error</PageTitle>
+<PageTitle>Error - StockScanTool</PageTitle>
 
-<h1 class="text-danger">Error.</h1>
-<h2 class="text-danger">An error occurred while processing your request.</h2>
-
-@if (ShowRequestId)
-{
-    <p>
-        <strong>Request ID:</strong> <code>@RequestId</code>
-    </p>
-}
-
-<h3>Development Mode</h3>
-<p>
-    Swapping to <strong>Development</strong> environment will display more detailed information about the error that occurred.
-</p>
-<p>
-    <strong>The Development environment shouldn't be enabled for deployed applications.</strong>
-    It can result in displaying sensitive information from exceptions to end users.
-    For local debugging, enable the <strong>Development</strong> environment by setting the <strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
-    and restarting the app.
-</p>
-
-@code{
-    [CascadingParameter]
-    private HttpContext? HttpContext { get; set; }
-
-    private string? RequestId { get; set; }
-    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
-
-    protected override void OnInitialized() =>
-        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
-}
+<MudPaper Elevation="2" Style="padding:32px;border-radius:12px;max-width:600px;margin:48px auto;">
+    <div style="text-align:center;margin-bottom:16px;">
+        <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Large" Style="color:#D32F2F;font-size:3rem;" />
+    </div>
+    <MudText Typo="Typo.h4" Style="font-weight:700;text-align:center;margin-bottom:8px;">Something went wrong</MudText>
+    <MudText Typo="Typo.body1" Style="color:#757575;text-align:center;margin-bottom:24px;">
+        An unexpected error occurred. Please try again.
+    </MudText>
+    <div style="text-align:center;">
+        <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" Style="text-transform:none;">
+            Go to Dashboard
+        </MudButton>
+    </div>
+</MudPaper>

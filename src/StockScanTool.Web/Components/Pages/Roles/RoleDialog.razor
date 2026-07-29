@@ -1,0 +1,109 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight:600;">
+            <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Style="margin-right:8px;" />
+            @(IsEdit ? "Edit Role" : "Add Role")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="name" Label="Role Name" Variant="Variant.Outlined"
+                      Required="true" Margin="Margin.Normal" />
+        <MudTextField @bind-Value="description" Label="Description" Variant="Variant.Outlined"
+                      Margin="Margin.Normal" Lines="2" />
+        <MudText Typo="Typo.body2" Style="margin-top:8px;margin-bottom:4px;font-weight:600;">Permissions</MudText>
+        <div style="max-height:240px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:8px;">
+            @foreach (var group in groupedPermissions)
+            {
+                <MudText Typo="Typo.caption" Style="color:#757575;text-transform:uppercase;margin:8px 0 4px 8px;">@group.Key</MudText>
+                @foreach (var perm in group)
+                {
+                    <MudItem Style="padding:2px 8px;">
+                        <MudCheckbox T="bool" Checked="@(selectedPermissionIds.GetValueOrDefault(perm.Id))"
+                                     CheckedChanged="(bool v) => { selectedPermissionIds[perm.Id] = v; StateHasChanged(); }"
+                                     Label="@perm.Name" Color="Color.Primary" Dense="true" />
+                    </MudItem>
+                }
+            }
+        </div>
+        <MudSwitch @bind-Value="isActive" Label="Active" Color="Color.Success" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Outlined" Style="text-transform:none;">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="@saving"
+                   Style="text-transform:none;">
+            @if (saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="margin-right:8px;" /> }
+            @(IsEdit ? "Update" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public RoleDto? Role { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+
+    private bool IsEdit => Role is not null;
+    private string name = "";
+    private string description = "";
+    private bool isActive = true;
+    private bool saving;
+    private List<PermissionDto> permissions = [];
+    private Dictionary<int, bool> selectedPermissionIds = [];
+
+    private IEnumerable<IGrouping<string, PermissionDto>> groupedPermissions
+        => permissions.GroupBy(p => p.GroupName);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            permissions = (await Api.GetPermissions()).ToList();
+            foreach (var p in permissions)
+                selectedPermissionIds[p.Id] = false;
+        }
+        catch { }
+
+        if (Role is not null)
+        {
+            name = Role.Name;
+            description = Role.Description;
+            isActive = Role.IsActive;
+            foreach (var p in permissions)
+            {
+                if (Role.Permissions.Contains(p.Code))
+                    selectedPermissionIds[p.Id] = true;
+            }
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        saving = true;
+        try
+        {
+            var permIds = selectedPermissionIds.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
+
+            if (IsEdit)
+                await Api.UpdateRole(Role!.Id, new UpdateRoleRequest(name, description, isActive, permIds));
+            else
+                await Api.CreateRole(new CreateRoleRequest(name, description, permIds));
+
+            Snackbar.Add(IsEdit ? "Role updated." : "Role created.", Severity.Success);
+            await OnSave.InvokeAsync();
+            MudDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        saving = false;
+    }
+}

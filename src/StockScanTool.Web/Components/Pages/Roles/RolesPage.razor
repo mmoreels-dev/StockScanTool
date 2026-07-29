@@ -1,0 +1,147 @@
+@page "/roles"
+@inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Roles - StockScanTool</PageTitle>
+
+<PageHeader Title="Roles" ButtonText="Add Role" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewRole" />
+
+@if (loading)
+{
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <ErrorAlert Message="@error" />
+}
+else
+{
+    <MudDataGrid T="RoleDto" Items="@FilteredRoles" Hover="true" Dense="true"
+                 SortMode="SortMode.Single" Elevation="2" Style="border-radius:12px;overflow:hidden;"
+                 Filterable="true" Groupable="false">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchText" Placeholder="Search roles..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium" Class="mt-0" Immediate="true"
+                          DebounceInterval="300" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:300px;" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.Name" Title="Name" />
+            <PropertyColumn Property="x => x.Description" Title="Description" />
+            <PropertyColumn Property="x => x.Permissions" Title="Permissions">
+                <CellTemplate>
+                    @{
+                        var perms = context.Item.Permissions;
+                        var shown = perms.Take(4).ToList();
+                        var remaining = perms.Count - shown.Count;
+                    }
+                    @foreach (var p in shown)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Filled">@p</MudChip>
+                    }
+                    @if (remaining > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">+@remaining</MudChip>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.IsActive" Title="Status">
+                <CellTemplate>
+                    @if (context.Item.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Active</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Inactive</MudChip>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => Edit(context.Item)" Title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => Delete(context.Item)" Title="Delete" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <MudText Style="padding:16px;color:#757575;">No roles found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="RoleDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    private List<RoleDto>? roles;
+    private string error = "";
+    private bool loading = true;
+    private string searchText = "";
+
+    private IEnumerable<RoleDto> FilteredRoles => roles?.Where(r =>
+        string.IsNullOrEmpty(searchText) ||
+        r.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        r.Description.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+    ) ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        try
+        {
+            roles = (await Api.GetRoles()).ToList();
+            error = "";
+        }
+        catch (UnauthorizedAccessException) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        catch { error = "Could not connect to the API."; }
+        loading = false;
+    }
+
+    private void NewRole() => ShowDialog(null);
+    private void Edit(RoleDto role) => ShowDialog(role);
+
+    private async Task ShowDialog(RoleDto? role)
+    {
+        var parameters = new DialogParameters<RoleDialog>
+        {
+            { x => x.Role, role },
+            { x => x.OnSave, EventCallback.Factory.Create(this, LoadData) }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<RoleDialog>(role == null ? "Add Role" : "Edit Role", parameters, options);
+    }
+
+    private async Task Delete(RoleDto role)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Role",
+            $"Are you sure you want to delete \"{role.Name}\"?",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            try
+            {
+                await Api.DeleteRole(role.Id);
+                Snackbar.Add("Role deleted.", Severity.Success);
+                await LoadData();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        }
+    }
+}

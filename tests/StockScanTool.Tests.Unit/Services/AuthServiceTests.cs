@@ -1,31 +1,36 @@
 using Xunit;
 using Moq;
 using FluentAssertions;
-using StockScanTool.Api.Services;
+using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
 using StockScanTool.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace StockScanTool.Tests.Unit.Services;
 
 public class AuthServiceTests
 {
     private readonly Mock<IScanningDeviceRepository> _deviceRepoMock;
+    private readonly Mock<IRepository<User>> _userRepoMock;
     private readonly Mock<IUnitOfWork> _unitOfWorkMock;
     private readonly Mock<IJwtTokenService> _jwtMock;
+    private readonly Mock<ILogger<AuthService>> _loggerMock;
     private readonly AuthService _sut;
 
     public AuthServiceTests()
     {
         _deviceRepoMock = new Mock<IScanningDeviceRepository>();
+        _userRepoMock = new Mock<IRepository<User>>();
         _unitOfWorkMock = new Mock<IUnitOfWork>();
         _jwtMock = new Mock<IJwtTokenService>();
-        _sut = new AuthService(_deviceRepoMock.Object, _unitOfWorkMock.Object, _jwtMock.Object);
+        _loggerMock = new Mock<ILogger<AuthService>>();
+        _sut = new AuthService(_deviceRepoMock.Object, _userRepoMock.Object, _unitOfWorkMock.Object, _jwtMock.Object, _loggerMock.Object);
     }
 
     [Fact]
-    public async Task LoginAsync_ReturnsToken_WhenValidApiKey()
+    public async Task LoginDeviceAsync_ReturnsToken_WhenValidApiKey()
     {
         var store = new Store { Id = 1, Name = "Main Store" };
         var device = new ScanningDevice
@@ -33,14 +38,14 @@ public class AuthServiceTests
             Id = 1,
             DeviceName = "Scanner 1",
             StoreId = 1,
-            ApiKey = "valid-key",
+            ApiKey = ApiKeyHasher.Hash("valid-key"),
             IsActive = true,
             Store = store
         };
-        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync("valid-key")).ReturnsAsync(device);
+        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync(ApiKeyHasher.Hash("valid-key"))).ReturnsAsync(device);
         _jwtMock.Setup(j => j.GenerateDeviceToken(1, 1)).Returns("jwt-token-123");
 
-        var result = await _sut.LoginAsync(new DeviceLoginRequest("valid-key"));
+        var result = await _sut.LoginDeviceAsync(new DeviceLoginRequest("valid-key"));
 
         result.Should().NotBeNull();
         result!.DeviceId.Should().Be(1);
@@ -52,17 +57,17 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task LoginAsync_ReturnsNull_WhenInvalidApiKey()
+    public async Task LoginDeviceAsync_ReturnsNull_WhenInvalidApiKey()
     {
-        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync("bad-key")).ReturnsAsync((ScanningDevice?)null);
+        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync(It.IsAny<string>())).ReturnsAsync((ScanningDevice?)null);
 
-        var result = await _sut.LoginAsync(new DeviceLoginRequest("bad-key"));
+        var result = await _sut.LoginDeviceAsync(new DeviceLoginRequest("bad-key"));
 
         result.Should().BeNull();
     }
 
     [Fact]
-    public async Task LoginAsync_ReturnsNull_WhenDeviceInactive()
+    public async Task LoginDeviceAsync_ReturnsNull_WhenDeviceInactive()
     {
         var store = new Store { Id = 1, Name = "Main Store" };
         var device = new ScanningDevice
@@ -70,20 +75,20 @@ public class AuthServiceTests
             Id = 1,
             DeviceName = "Scanner 1",
             StoreId = 1,
-            ApiKey = "inactive-key",
+            ApiKey = ApiKeyHasher.Hash("inactive-key"),
             IsActive = false,
             Store = store
         };
-        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync("inactive-key")).ReturnsAsync(device);
+        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync(ApiKeyHasher.Hash("inactive-key"))).ReturnsAsync(device);
 
-        var result = await _sut.LoginAsync(new DeviceLoginRequest("inactive-key"));
+        var result = await _sut.LoginDeviceAsync(new DeviceLoginRequest("inactive-key"));
 
         result.Should().BeNull();
         _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task LoginAsync_UpdatesLastPing()
+    public async Task LoginDeviceAsync_UpdatesLastPing()
     {
         var store = new Store { Id = 1, Name = "Main Store" };
         var device = new ScanningDevice
@@ -91,17 +96,114 @@ public class AuthServiceTests
             Id = 1,
             DeviceName = "Scanner 1",
             StoreId = 1,
-            ApiKey = "valid-key",
+            ApiKey = ApiKeyHasher.Hash("valid-key"),
             IsActive = true,
             Store = store,
             LastPing = null
         };
-        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync("valid-key")).ReturnsAsync(device);
+        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync(ApiKeyHasher.Hash("valid-key"))).ReturnsAsync(device);
         _jwtMock.Setup(j => j.GenerateDeviceToken(1, 1)).Returns("token");
 
-        await _sut.LoginAsync(new DeviceLoginRequest("valid-key"));
+        await _sut.LoginDeviceAsync(new DeviceLoginRequest("valid-key"));
 
         device.LastPing.Should().NotBeNull();
         device.LastPing.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task LoginDeviceAsync_HashesApiKeyBeforeLookup()
+    {
+        _deviceRepoMock.Setup(r => r.GetByApiKeyAsync(It.IsAny<string>())).ReturnsAsync((ScanningDevice?)null);
+
+        await _sut.LoginDeviceAsync(new DeviceLoginRequest("test-api-key"));
+
+        _deviceRepoMock.Verify(r => r.GetByApiKeyAsync(ApiKeyHasher.Hash("test-api-key")), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginUserAsync_ReturnsToken_WhenValidCredentials()
+    {
+        var permission = new Permission { Id = 1, Code = "dashboard.read", Name = "View Dashboard", GroupName = "Dashboard" };
+        var role = new Role
+        {
+            Id = 1,
+            Name = "Admin",
+            Description = "Full access",
+            RolePermissions = [new RolePermission { RoleId = 1, PermissionId = 1, Permission = permission }]
+        };
+        var user = new User
+        {
+            Id = 1,
+            Username = "admin",
+            PasswordHash = PasswordHasher.Hash("admin"),
+            DisplayName = "Admin User",
+            IsActive = true,
+            UserRoles = [new UserRole { UserId = 1, RoleId = 1, Role = role }]
+        };
+
+        var users = new List<User> { user }.AsQueryable();
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.AsAsyncQueryable());
+        _jwtMock.Setup(j => j.GenerateUserToken(1, "admin", "Admin User",
+            It.Is<List<string>>(l => l.Contains("Admin")),
+            It.Is<List<string>>(l => l.Contains("dashboard.read"))))
+            .Returns("user-jwt-token");
+
+        var result = await _sut.LoginUserAsync("admin", "admin");
+
+        result.Should().NotBeNull();
+        result!.Token.Should().Be("user-jwt-token");
+    }
+
+    [Fact]
+    public async Task LoginUserAsync_ReturnsNull_WhenUserNotFound()
+    {
+        var users = new List<User>().AsQueryable();
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.AsAsyncQueryable());
+
+        var result = await _sut.LoginUserAsync("nonexistent", "password");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LoginUserAsync_ReturnsNull_WhenUserInactive()
+    {
+        var user = new User
+        {
+            Id = 1,
+            Username = "inactive",
+            PasswordHash = PasswordHasher.Hash("pass"),
+            DisplayName = "Inactive",
+            IsActive = false,
+            UserRoles = []
+        };
+
+        var users = new List<User> { user }.AsQueryable();
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.AsAsyncQueryable());
+
+        var result = await _sut.LoginUserAsync("inactive", "pass");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LoginUserAsync_ReturnsNull_WhenWrongPassword()
+    {
+        var user = new User
+        {
+            Id = 1,
+            Username = "admin",
+            PasswordHash = PasswordHasher.Hash("correct-password"),
+            DisplayName = "Admin",
+            IsActive = true,
+            UserRoles = []
+        };
+
+        var users = new List<User> { user }.AsQueryable();
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.AsAsyncQueryable());
+
+        var result = await _sut.LoginUserAsync("admin", "wrong-password");
+
+        result.Should().BeNull();
     }
 }

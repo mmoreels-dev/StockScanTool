@@ -1,0 +1,10 @@
+@namespace StockScanTool.Shared.Components
+
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+@ChildContent
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

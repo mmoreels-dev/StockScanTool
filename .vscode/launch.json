@@ -10,9 +10,9 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/src/StockScanTool/bin/Debug/net8.0/StockScanTool.dll",
+            "program": "${workspaceFolder}/src/StockScanTool.Api/bin/Debug/net10.0/StockScanTool.Api.dll",
             "args": [],
-            "cwd": "${workspaceFolder}/src/StockScanTool",
+            "cwd": "${workspaceFolder}/src/StockScanTool.Api",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "internalConsole",
             "stopAtEntry": false

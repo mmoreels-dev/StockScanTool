@@ -1,0 +1,10 @@
+@namespace StockScanTool.Shared.Components
+
+@if (!string.IsNullOrEmpty(Message))
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Style="border-radius:8px;">@Message</MudAlert>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+}

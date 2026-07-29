@@ -1,81 +1,126 @@
 @page "/sales"
-@rendermode InteractiveServer
-@using StockScanTool.Web.Services
 @inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
 
-<h3>Sales History</h3>
+<PageTitle>Sales - StockScanTool</PageTitle>
 
-<div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
-    <select @bind="filterStoreId" @bind:after="FilterChanged" style="padding:8px; border:1px solid #ddd; border-radius:4px;">
-        <option value="0">All Stores</option>
-        @foreach (var s in stores)
-        {
-            <option value="@s.Id">@s.Name</option>
-        }
-    </select>
-</div>
+<PageHeader Title="Sales History" />
 
-@if (sales is null)
+@if (loading)
 {
-    <p>Loading...</p>
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <ErrorAlert Message="@error" />
 }
 else
 {
-    <table class="data-table">
-        <thead>
-            <tr><th>ID</th><th>Store</th><th>Device</th><th>Items</th><th>Total</th><th>Date</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var s in sales)
-            {
-                <tr>
-                    <td>@s.Id</td>
-                    <td>@s.StoreName</td>
-                    <td>@s.DeviceName</td>
-                    <td>@s.Items.Sum(i => i.Quantity)</td>
-                    <td>@s.TotalAmount.ToString("C")</td>
-                    <td>@s.SaleDate.ToString("g")</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
+    <MudDataGrid T="SaleTransactionDto" Items="@FilteredSales" Hover="true" Dense="true"
+                 SortMode="SortMode.Single" Elevation="2" Style="border-radius:12px;overflow:hidden;"
+                 Filterable="true" Groupable="false"
+                 RowClick="RowClicked" HoverRowOnHover="true">
+        <ToolBarContent>
+            <MudSelect T="int" @bind-Value="filterStoreId" Label="Filter by Store" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Style="max-width:200px;" Clearable="true">
+                <MudSelectItem Value="0">All Stores</MudSelectItem>
+                @foreach (var s in stores)
+                {
+                    <MudSelectItem Value="@s.Id">@s.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSpacer />
+            <MudText Typo="Typo.body2" Style="color:#757575;align-self:center;">
+                @FilteredSales.Count() transaction(s) | Total: @FilteredSales.Sum(s => s.TotalAmount).ToString("C")
+            </MudText>
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.Id" Title="ID" />
+            <PropertyColumn Property="x => x.StoreName" Title="Store" />
+            <PropertyColumn Property="x => x.DeviceName" Title="Device" />
+            <TemplateColumn Title="Items">
+                <CellTemplate>
+                    @context.Item.Items.Sum(i => i.Quantity)
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.TotalAmount" Title="Total" Format="C" />
+            <PropertyColumn Property="x => x.SaleDate" Title="Date" Format="g" />
+        </Columns>
+        <NoRecordsContent>
+            <MudText Style="padding:16px;color:#757575;">No sales found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="SaleTransactionDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudDataGrid>
 
-@if (!string.IsNullOrEmpty(error))
-{
-    <div class="error-banner">@error</div>
+    @if (selectedSale is not null)
+    {
+        <MudDivider Style="margin:24px 0;" />
+        <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;">
+            <MudText Typo="Typo.h6" Style="font-weight:600;margin-bottom:12px;">
+                <MudIcon Icon="@Icons.Material.Filled.Receipt" Style="margin-right:8px;vertical-align:middle;" />
+                Transaction #@selectedSale.Id — @selectedSale.StoreName
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#757575;margin-bottom:16px;">
+                @selectedSale.SaleDate.ToString("g") · @selectedSale.DeviceName · Total: @selectedSale.TotalAmount.ToString("C")
+            </MudText>
+            <MudDataGrid T="SaleItemDto" Items="@selectedSale.Items" Hover="true" Dense="true"
+                         SortMode="SortMode.None" Elevation="0">
+                <Columns>
+                    <PropertyColumn Property="x => x.ProductName" Title="Product" />
+                    <PropertyColumn Property="x => x.Quantity" Title="Qty" />
+                    <PropertyColumn Property="x => x.PriceAtTimeOfSale" Title="Price" Format="C" />
+                    <TemplateColumn Title="Subtotal">
+                        <CellTemplate>
+                            @((context.Item.Quantity * context.Item.PriceAtTimeOfSale).ToString("C"))
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
+        </MudPaper>
+    }
 }
 
 @code {
     private List<SaleTransactionDto>? sales;
     private List<StoreDto> stores = new();
-    private int filterStoreId;
     private string error = "";
+    private bool loading = true;
+    private int filterStoreId;
+    private SaleTransactionDto? selectedSale;
+
+    private IEnumerable<SaleTransactionDto> FilteredSales => sales?.Where(s =>
+        filterStoreId == 0 || s.StoreId == filterStoreId
+    ) ?? [];
 
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            stores = await Api.GetStores();
-            sales = await Api.GetSales();
-        }
-        catch
-        {
-            error = "Could not connect to the API. Make sure the API server is running.";
-        }
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        await LoadData();
     }
 
-    private async Task FilterChanged()
+    private async Task LoadData()
     {
+        loading = true;
         try
         {
-            sales = filterStoreId == 0
-                ? await Api.GetSales()
-                : await Api.GetSalesByStore(filterStoreId);
+            stores = (await Api.GetStores()).ToList();
+            sales = (await Api.GetSales()).ToList();
+            error = "";
         }
-        catch
-        {
-            error = "Could not connect to the API.";
-        }
+        catch (UnauthorizedAccessException) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        catch { error = "Could not connect to the API."; }
+        loading = false;
+    }
+
+    private void RowClicked(DataGridRowClickEventArgs<SaleTransactionDto> args)
+    {
+        selectedSale = args.Item;
     }
 }

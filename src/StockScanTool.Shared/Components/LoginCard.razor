@@ -1,0 +1,21 @@
+@namespace StockScanTool.Shared.Components
+
+<MudPaper Elevation="8" Style="@($"width:100%;max-width:400px;border-radius:12px;overflow:hidden;margin:{Margin};")">
+    <div style="background:#FF6D00;padding:24px;">
+        <div style="width:56px;height:56px;background:#1A1A2E;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;">
+            @IconContent
+        </div>
+        <MudText Typo="Typo.h5" Style="color:white;font-weight:700;text-align:center;">StockScanTool</MudText>
+        <MudText Typo="Typo.body2" Style="color:rgba(255,255,255,0.8);text-align:center;">@Subtitle</MudText>
+    </div>
+    <div style="padding:32px;">
+        @ChildContent
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter] public RenderFragment? IconContent { get; set; }
+    [Parameter] public string Subtitle { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Margin { get; set; } = "auto";
+}

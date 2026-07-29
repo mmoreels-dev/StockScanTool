@@ -1,0 +1,85 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight:600;">
+            <MudIcon Icon="@Icons.Material.Filled.Warehouse" Style="margin-right:8px;" />
+            @(IsEdit ? "Update Stock Level" : "Set Stock Level")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudSelect T="int" @bind-Value="selectedStoreId" Label="Store" Variant="Variant.Outlined"
+                   Required="true" Margin="Margin.Normal" Disabled="@IsEdit">
+            <MudSelectItem Value="0">-- Select Store --</MudSelectItem>
+            @foreach (var s in Stores)
+            {
+                <MudSelectItem Value="@s.Id">@s.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect T="int" @bind-Value="selectedProductId" Label="Product" Variant="Variant.Outlined"
+                   Required="true" Margin="Margin.Normal" Disabled="@IsEdit">
+            <MudSelectItem Value="0">-- Select Product --</MudSelectItem>
+            @foreach (var p in Products)
+            {
+                <MudSelectItem Value="@p.Id">@p.Name (@p.Sku)</MudSelectItem>
+            }
+        </MudSelect>
+        <MudNumericField @bind-Value="quantity" Label="Quantity On Hand" Variant="Variant.Outlined"
+                         Required="true" Margin="Margin.Normal" Min="0" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Outlined" Style="text-transform:none;">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="@saving"
+                   Style="text-transform:none;">
+            @if (saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="margin-right:8px;" /> }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public InventoryDto? Item { get; set; }
+    [Parameter] public List<StoreDto> Stores { get; set; } = new();
+    [Parameter] public List<ProductDto> Products { get; set; } = new();
+    [Parameter] public EventCallback OnSave { get; set; }
+
+    private bool IsEdit => Item is not null;
+    private int selectedStoreId;
+    private int selectedProductId;
+    private int quantity;
+    private bool saving;
+
+    protected override void OnInitialized()
+    {
+        if (Item is not null)
+        {
+            selectedStoreId = Item.StoreId;
+            selectedProductId = Item.ProductId;
+            quantity = Item.QuantityOnHand;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (selectedStoreId == 0 || selectedProductId == 0) return;
+
+        saving = true;
+        try
+        {
+            await Api.UpsertInventory(new UpdateInventoryRequest(selectedProductId, selectedStoreId, quantity));
+            Snackbar.Add("Stock level updated.", Severity.Success);
+            await OnSave.InvokeAsync();
+            MudDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        saving = false;
+    }
+}

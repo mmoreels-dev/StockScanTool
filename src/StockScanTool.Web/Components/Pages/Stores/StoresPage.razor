@@ -1,0 +1,130 @@
+@page "/stores"
+@inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Stores - StockScanTool</PageTitle>
+
+<PageHeader Title="Stores" ButtonText="Add Store" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewStore" />
+
+@if (loading)
+{
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <ErrorAlert Message="@error" />
+}
+else
+{
+    <MudDataGrid T="StoreDto" Items="@FilteredStores" Hover="true" Dense="true"
+                 SortMode="SortMode.Single" Elevation="2" Style="border-radius:12px;overflow:hidden;"
+                 Filterable="true" Groupable="false">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchText" Placeholder="Search stores..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium" Class="mt-0" Immediate="true"
+                          DebounceInterval="300" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:300px;" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.Name" Title="Name" />
+            <PropertyColumn Property="x => x.Address" Title="Address" />
+            <PropertyColumn Property="x => x.IsActive" Title="Status">
+                <CellTemplate>
+                    @if (context.Item.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Active</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Inactive</MudChip>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => Edit(context.Item)" Title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => Delete(context.Item)" Title="Delete" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <MudText Style="padding:16px;color:#757575;">No stores found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="StoreDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    private List<StoreDto>? stores;
+    private string error = "";
+    private bool loading = true;
+    private string searchText = "";
+
+    private IEnumerable<StoreDto> FilteredStores => stores?.Where(s =>
+        string.IsNullOrEmpty(searchText) ||
+        s.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        s.Address.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+    ) ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        try
+        {
+            stores = (await Api.GetStores()).ToList();
+            error = "";
+        }
+        catch (UnauthorizedAccessException) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        catch { error = "Could not connect to the API."; }
+        loading = false;
+    }
+
+    private void NewStore() => ShowDialog(null);
+    private void Edit(StoreDto store) => ShowDialog(store);
+
+    private async Task ShowDialog(StoreDto? store)
+    {
+        var parameters = new DialogParameters<StoreDialog>
+        {
+            { x => x.Store, store },
+            { x => x.OnSave, EventCallback.Factory.Create(this, LoadData) }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<StoreDialog>(store == null ? "Add Store" : "Edit Store", parameters, options);
+    }
+
+    private async Task Delete(StoreDto store)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Store",
+            $"Are you sure you want to delete \"{store.Name}\"?",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            try
+            {
+                await Api.DeleteStore(store.Id);
+                Snackbar.Add("Store deleted.", Severity.Success);
+                await LoadData();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        }
+    }
+}

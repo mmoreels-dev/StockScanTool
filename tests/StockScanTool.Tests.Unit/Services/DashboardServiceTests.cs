@@ -1,7 +1,7 @@
 using Xunit;
 using Moq;
 using FluentAssertions;
-using StockScanTool.Api.Services;
+using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Domain.Entities;
 
@@ -41,17 +41,19 @@ public class DashboardServiceTests
         var store = new Store { Id = 1, Name = "Main" };
         var device = new ScanningDevice { Id = 1, DeviceName = "Scanner 1" };
 
-        _saleRepoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<SaleTransaction>
+        var sales = new List<SaleTransaction>
         {
             new() { Id = 1, StoreId = 1, Store = store, ScanningDevice = device, TotalAmount = 100m, SaleDate = DateTime.UtcNow, SaleItems = [] },
             new() { Id = 2, StoreId = 1, Store = store, ScanningDevice = device, TotalAmount = 50m, SaleDate = DateTime.UtcNow, SaleItems = [] }
-        });
+        };
+        _saleRepoMock.Setup(r => r.AsQueryable()).Returns(sales.AsAsyncQueryable());
 
         var product = new Product { Id = 1, Name = "Widget", Barcode = "123" };
-        _inventoryRepoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<Inventory>
+        var inventory = new List<Inventory>
         {
             new() { Id = 1, ProductId = 1, StoreId = 1, QuantityOnHand = 25, Product = product, Store = store }
-        });
+        };
+        _inventoryRepoMock.Setup(r => r.AsQueryable()).Returns(inventory.AsAsyncQueryable());
 
         var result = await _sut.GetSummaryAsync();
 

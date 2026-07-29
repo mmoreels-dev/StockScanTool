@@ -1,9 +1,7 @@
-using StockScanTool.Contracts;
-
 namespace StockScanTool.Application.Services;
 
 public interface IJwtTokenService
 {
     string GenerateDeviceToken(int deviceId, int storeId);
-    string GenerateAdminToken();
+    string GenerateUserToken(int userId, string username, string displayName, IList<string> roles, IList<string> permissions);
 }

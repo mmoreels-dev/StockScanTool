@@ -1,8 +1,7 @@
 namespace StockScanTool.Domain.Entities;
 
-public class ScanningDevice
+public class ScanningDevice : AuditableEntity
 {
-    public int Id { get; set; }
     public string DeviceName { get; set; } = string.Empty;
     public int StoreId { get; set; }
     public string ApiKey { get; set; } = string.Empty;

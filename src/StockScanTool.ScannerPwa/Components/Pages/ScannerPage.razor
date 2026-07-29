@@ -1,30 +1,37 @@
 @page "/scanner"
 @inject ApiService Api
 @inject NavigationManager Nav
-@implements IDisposable
-@inject BarcodeScannerService Scanner
+@implements IAsyncDisposable
+@inject StockScanTool.Shared.Services.BarcodeScannerService Scanner
 @inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
 
 @if (!Api.IsAuthenticated)
 {
     <div class="not-auth">
-        <p>Not connected.</p>
-        <button class="btn btn-primary" @onclick="GoLogin">Go to Login</button>
+        <MudText Typo="Typo.h5" Style="color:white;font-weight:600;margin-bottom:8px;">Not connected.</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GoLogin" Style="text-transform:none;">
+            Go to Login
+        </MudButton>
     </div>
 }
 else
 {
     <div class="scanner-layout">
-        <!-- Top Bar -->
-        <div class="scanner-topbar">
-            <div class="topbar-info">
-                <strong>@Api.StoreName</strong>
-                <small>@Api.DeviceName</small>
+        <MudAppBar Elevation="0" Style="background:#1A1A2E;border-bottom:2px solid #FF6D00;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <img src="media/logo.svg" alt="MM" width="28" height="28" style="border-radius:6px;" />
+                <div>
+                    <MudText Typo="Typo.body2" Style="color:white;font-weight:600;line-height:1.2;">@Api.StoreName</MudText>
+                    <MudText Typo="Typo.caption" Style="color:#8888aa;line-height:1.2;">@Api.DeviceName</MudText>
+                </div>
             </div>
-            <button class="btn btn-sm btn-outline" @onclick="Logout">Logout</button>
-        </div>
+            <MudSpacer />
+            <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit"
+                           OnClick="Logout" title="Logout" />
+        </MudAppBar>
 
-        <!-- Camera -->
         <div class="camera-container">
             <div id="barcode-reader"></div>
             @if (!string.IsNullOrEmpty(scannerStatus))
@@ -32,97 +39,52 @@ else
                 <div class="scanner-status">@scannerStatus</div>
             }
 
-            @if (lastScan is not null && !showCart)
+            @if (lastScan is not null)
             {
                 <div class="scan-overlay" @onclick="() => lastScan = null">
-                    <div class="scan-card" @onclick:stopPropagation>
-                        <h3>@lastScan.Name</h3>
-                        <div class="scan-price">@lastScan.Price.ToString("C")</div>
-                        <div class="scan-sku">SKU: @lastScan.Sku</div>
-                        <button class="btn btn-success btn-block" @onclick="AddToCart">Add to Cart</button>
-                    </div>
+                    <MudPaper Class="scan-card" @onclick:stopPropagation>
+                        <MudText Typo="Typo.h5" Style="font-weight:600;margin-bottom:4px;">@lastScan.Name</MudText>
+                        <MudText Typo="Typo.h4" Style="font-weight:700;color:#FF6D00;margin-bottom:4px;">@lastScan.Price.ToString("C")</MudText>
+                        <MudText Typo="Typo.caption" Style="color:#999;margin-bottom:16px;display:block;">SKU: @lastScan.Sku</MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                   OnClick="AddToCart" Style="text-transform:none;">
+                            <MudIcon Icon="@Icons.Material.Filled.AddShoppingCart" Style="margin-right:6px;" />
+                            Add to Cart
+                        </MudButton>
+                    </MudPaper>
                 </div>
             }
         </div>
 
-        <!-- Bottom Cart Bar -->
         <div class="scanner-bottombar">
             <div class="cart-info">
-                <span class="cart-count">@cart.Count item(s)</span>
-                <span class="cart-total">@cart.Sum(c => c.Total):C</span>
+                <MudText Typo="Typo.caption" Style="color:#666;">@cart.Count item(s)</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight:700;color:#FF6D00;">@cart.Sum(c => c.Total).ToString("C")</MudText>
             </div>
             <div class="cart-actions">
-                <button class="btn btn-primary" @onclick="ToggleCart"
-                        disabled="@(cart.Count == 0)">
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary"
+                           Disabled="@(cart.Count == 0)" OnClick="OpenCart"
+                           Style="text-transform:none;">
                     View Cart
-                </button>
-                <button class="btn btn-success" @onclick="Checkout"
-                        disabled="@(cart.Count == 0)">
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           Disabled="@(cart.Count == 0)" OnClick="Checkout"
+                           Style="text-transform:none;">
                     Checkout
-                </button>
+                </MudButton>
             </div>
         </div>
-
-        <!-- Cart Modal -->
-        @if (showCart)
-        {
-            <div class="modal-backdrop" @onclick="() => showCart = false">
-                <div class="modal-card" @onclick:stopPropagation>
-                    <h3>Shopping Cart</h3>
-
-                    @if (cart.Count == 0)
-                    {
-                        <p class="empty">Cart is empty.</p>
-                    }
-                    else
-                    {
-                        <table class="cart-table">
-                            <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th></th></tr></thead>
-                            <tbody>
-                                @foreach (var item in cart)
-                                {
-                                    <tr>
-                                        <td>@item.Name</td>
-                                        <td>
-                                            <button class="qty-btn" @onclick="() => ChangeQty(item, -1)">-</button>
-                                            @item.Quantity
-                                            <button class="qty-btn" @onclick="() => ChangeQty(item, 1)">+</button>
-                                        </td>
-                                        <td>@item.Total.ToString("C")</td>
-                                        <td><button class="btn-remove" @onclick="() => RemoveItem(item)">x</button></td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                        <div class="cart-footer">
-                            <strong>Total: @cart.Sum(c => c.Total):C</strong>
-                        </div>
-                    }
-
-                    <button class="btn btn-secondary btn-block" @onclick="() => showCart = false">Close</button>
-                </div>
-            </div>
-        }
-
-        @if (!string.IsNullOrEmpty(message))
-        {
-            <div class="toast @messageType">@message</div>
-        }
     </div>
 }
 
 @code {
     private List<CartItem> cart = new();
     private BarcodeLookupResponse? lastScan;
-    private bool showCart;
-    private string message = "";
-    private string messageType = "success";
     private string scannerStatus = "Initializing scanner...";
 
     protected override Task OnInitializedAsync()
     {
         Scanner.OnBarcodeDetected += OnBarcodeDetected;
-        Scanner.ScannerDebugMessage += OnScannerDebug;
         return Task.CompletedTask;
     }
 
@@ -141,36 +103,37 @@ else
             catch (Exception ex)
             {
                 scannerStatus = $"Camera error: {ex.Message}";
-                ShowMessage(scannerStatus, "error");
+                Snackbar.Add(scannerStatus, Severity.Error);
             }
         }
     }
 
-    private async void OnBarcodeDetected(string barcode)
+    private async Task OnBarcodeDetected(string barcode)
     {
-        if (lastScan is not null) return;
-
-        await Scanner.StopScanningAsync();
-
-        var product = await Api.LookupBarcodeAsync(barcode);
-        if (product is null)
+        try
         {
-            ShowMessage($"Barcode not found: {barcode}", "error");
-            await Scanner.StartScanningAsync("barcode-reader");
-            return;
+            if (lastScan is not null) return;
+
+            await Scanner.StopScanningAsync();
+
+            var product = await Api.LookupBarcodeAsync(barcode);
+            if (product is null)
+            {
+                Snackbar.Add($"Barcode not found: {barcode}", Severity.Error);
+                await Scanner.StartScanningAsync("barcode-reader");
+                return;
+            }
+
+            lastScan = product;
+            await InvokeAsync(StateHasChanged);
         }
-
-        lastScan = product;
-        await InvokeAsync(StateHasChanged);
+        catch (UnauthorizedAccessException)
+        {
+            Nav.NavigateTo("/");
+        }
     }
 
-    private void OnScannerDebug(string message)
-    {
-        scannerStatus = message;
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void AddToCart()
+    private async Task AddToCart()
     {
         if (lastScan is null) return;
 
@@ -187,39 +150,60 @@ else
                 Quantity = 1
             });
 
-        ShowMessage($"{lastScan.Name} added", "success");
+        Snackbar.Add($"{lastScan.Name} added to cart", Severity.Success);
         lastScan = null;
-        _ = Scanner.StartScanningAsync("barcode-reader");
+        try { await Scanner.StartScanningAsync("barcode-reader"); } catch { /* scanner will restart on next scan */ }
     }
 
     private async Task Checkout()
     {
-        if (cart.Count == 0) return;
-
-        var confirm = await JS.InvokeAsync<bool>("confirm",
-            $"Complete sale for {cart.Count} item(s) totalling {cart.Sum(c => c.Total):C}?");
-        if (!confirm) return;
-
-        var result = await Api.SubmitSaleAsync(cart);
-        if (result is not null)
+        try
         {
-            ShowMessage($"Sale #{result.Id} complete — {result.TotalAmount:C}", "success");
-            cart.Clear();
+            if (cart.Count == 0) return;
+
+            var confirm = await JS.InvokeAsync<bool>("confirm",
+                $"Complete sale for {cart.Count} item(s) totalling {cart.Sum(c => c.Total):C}?");
+            if (!confirm) return;
+
+            var result = await Api.SubmitSaleAsync(cart);
+            if (result is not null)
+            {
+                Snackbar.Add($"Sale #{result.Id} complete — {result.TotalAmount:C}", Severity.Success);
+                cart.Clear();
+            }
+            else
+            {
+                Snackbar.Add("Sale failed — check stock levels.", Severity.Error);
+            }
         }
-        else
+        catch (UnauthorizedAccessException)
         {
-            ShowMessage("Sale failed — check stock levels.", "error");
+            Nav.NavigateTo("/");
         }
     }
 
-    private void ChangeQty(CartItem item, int delta)
+    private async Task OpenCart()
     {
-        item.Quantity += delta;
-        if (item.Quantity <= 0) cart.Remove(item);
-    }
+        var parameters = new DialogParameters<List<CartItem>>
+        {
+            { "Cart", cart }
+        };
 
-    private void RemoveItem(CartItem item) => cart.Remove(item);
-    private void ToggleCart() => showCart = !showCart;
+        var dialog = await Dialog.ShowAsync<CartDialog>("Shopping Cart", parameters,
+            new DialogOptions
+            {
+                FullWidth = true,
+                MaxWidth = MaxWidth.Small,
+                Position = DialogPosition.Center,
+                CloseButton = true
+            });
+
+        var result = await dialog.Result;
+        if (result?.Data is bool checkout && checkout)
+        {
+            await Checkout();
+        }
+    }
 
     private async Task Logout()
     {
@@ -230,21 +214,10 @@ else
 
     private void GoLogin() => Nav.NavigateTo("/");
 
-    private void ShowMessage(string msg, string type)
-    {
-        message = msg;
-        messageType = type;
-        InvokeAsync(async () =>
-        {
-            await Task.Delay(2500);
-            message = "";
-            await InvokeAsync(StateHasChanged);
-        });
-    }
-
-    public async void Dispose()
+    public async ValueTask DisposeAsync()
     {
         Scanner.OnBarcodeDetected -= OnBarcodeDetected;
         await Scanner.StopScanningAsync();
+        GC.SuppressFinalize(this);
     }
 }

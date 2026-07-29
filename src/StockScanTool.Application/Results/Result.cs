@@ -23,5 +23,5 @@ public class Result<T>
 
     public static Result<T> Ok(T data) => new(data);
     public static Result<T> Fail(string error) => new(error);
-    public static Result<T> Fail(List<string> errors) => new(errors.First(), errors);
+    public static Result<T> Fail(List<string> errors) => new(errors.Count > 0 ? errors.First() : "An error occurred.", errors);
 }

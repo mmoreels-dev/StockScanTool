@@ -1,0 +1,222 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IDisposable
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight:600;">
+            <MudIcon Icon="@Icons.Material.Filled.Inventory2" Style="margin-right:8px;" />
+            @(IsEdit ? "Edit Product" : "Add Product")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="sku" Label="SKU" Variant="Variant.Outlined"
+                              Required="true" Margin="Margin.Normal" Placeholder="e.g. PROD-001" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="name" Label="Product Name" Variant="Variant.Outlined"
+                              Required="true" Margin="Margin.Normal" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <div style="display:flex;gap:8px;align-items:flex-start;">
+                    <MudTextField @bind-Value="barcode" Label="Barcode" Variant="Variant.Outlined"
+                                  Required="true" Margin="Margin.Normal" Style="flex:1;"
+                                  Placeholder="e.g. 5901234123457" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ScanBarcode"
+                               Disabled="@scanning" Style="margin-top:12px;min-width:100px;text-transform:none;">
+                        @if (scanning)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="margin-right:4px;" />
+                            <span>Scanning...</span>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CameraAlt" Size="Size.Small" Style="margin-right:4px;" />
+                            <span>Scan</span>
+                        }
+                    </MudButton>
+                </div>
+                <div id="admin-barcode-reader" style="width:100%;max-width:400px;margin-top:8px;@(scanning ? "" : "display:none;")"></div>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField @bind-Value="price" Label="Price" Variant="Variant.Outlined"
+                                 Required="true" Margin="Margin.Normal" Min="0m" Step="0.01m"
+                                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AttachMoney" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="description" Label="Description" Variant="Variant.Outlined"
+                              Margin="Margin.Normal" Lines="2" />
+            </MudItem>
+            <MudItem xs="12">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <MudFileUpload T="IBrowserFile" FilesChanged="@OnFileSelected" AcceptedContentTypes="image/jpeg,image/png,image/gif,image/webp">
+                        <ButtonTemplate>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload">
+                                @(!string.IsNullOrEmpty(_imageFileName) ? "Change Image" : "Select Image")
+                            </MudButton>
+                        </ButtonTemplate>
+                    </MudFileUpload>
+                    @if (!string.IsNullOrEmpty(_imageFileName))
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" OnClose="@ClearImage">@_imageFileName</MudChip>
+                    }
+                    else if (IsEdit && !string.IsNullOrEmpty(Product?.ImageUrl) && !_imageRemoved)
+                    {
+                        <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="@ClearImage" Size="Size.Small">
+                            Remove Image
+                        </MudButton>
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(_previewDataUrl))
+                {
+                    <img src="@_previewDataUrl" style="max-width:200px;max-height:200px;margin-top:8px;border-radius:8px;object-fit:cover;" />
+                }
+                else if (IsEdit && !string.IsNullOrEmpty(Product?.ImageUrl) && !_imageRemoved)
+                {
+                    <img src="@Product.ImageUrl" style="max-width:200px;max-height:200px;margin-top:8px;border-radius:8px;object-fit:cover;" />
+                }
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Outlined" Style="text-transform:none;">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="@saving"
+                   Style="text-transform:none;">
+            @if (saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="margin-right:8px;" /> }
+            @(IsEdit ? "Update" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public ProductDto? Product { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+
+    private bool IsEdit => Product is not null;
+    private string sku = "", name = "", barcode = "", description = "";
+    private decimal price;
+    private bool saving;
+    private bool scanning;
+    private IBrowserFile? _imageFile;
+    private string _imageFileName = "";
+    private string? _previewDataUrl;
+    private bool _imageRemoved;
+    private DotNetObjectReference<ProductDialog>? _dotNetRef;
+    private bool _needsScan;
+
+    protected override void OnInitialized()
+    {
+        if (Product is not null)
+        {
+            sku = Product.Sku;
+            name = Product.Name;
+            barcode = Product.Barcode;
+            description = Product.Description;
+            price = Product.Price;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_needsScan)
+        {
+            _needsScan = false;
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            try { await JS.InvokeVoidAsync("stockScan.scanOnce", "admin-barcode-reader", _dotNetRef); }
+            catch (Exception ex) { Snackbar.Add($"Camera error: {ex.Message}", Severity.Error); scanning = false; await InvokeAsync(StateHasChanged); }
+        }
+    }
+
+    private void ScanBarcode()
+    {
+        scanning = true;
+        _needsScan = true;
+    }
+
+    [JSInvokable]
+    public async Task OnBarcodeFound(string value)
+    {
+        barcode = value;
+        scanning = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task OnFileSelected(IBrowserFile? file)
+    {
+        if (file is null) return;
+
+        _imageFile = file;
+        _imageFileName = file.Name;
+        _imageRemoved = false;
+
+        using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        var bytes = ms.ToArray();
+        _previewDataUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(bytes)}";
+    }
+
+    private void ClearImage()
+    {
+        _imageFile = null;
+        _imageFileName = "";
+        _previewDataUrl = null;
+        _imageRemoved = true;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(barcode) || price <= 0) return;
+
+        saving = true;
+        try
+        {
+            int productId;
+            if (IsEdit)
+            {
+                productId = Product!.Id;
+                await Api.UpdateProduct(productId, new UpdateProductRequest(sku, name, description, barcode, price));
+            }
+            else
+            {
+                var created = await Api.CreateProduct(new CreateProductRequest(sku, name, description, barcode, price));
+                productId = created.Id;
+            }
+
+            if (_imageFile is not null)
+            {
+                using var stream = _imageFile.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                ms.Position = 0;
+                await Api.UploadProductImage(productId, ms, _imageFile.Name);
+            }
+            else if (_imageRemoved && IsEdit && !string.IsNullOrEmpty(Product?.ImageUrl))
+            {
+                await Api.DeleteProductImage(productId);
+            }
+
+            Snackbar.Add(IsEdit ? "Product updated." : "Product created.", Severity.Success);
+            await OnSave.InvokeAsync();
+            MudDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        saving = false;
+    }
+
+    public void Dispose()
+    {
+        _dotNetRef?.Dispose();
+        _ = JS.InvokeVoidAsync("stockScan.stop");
+    }
+}

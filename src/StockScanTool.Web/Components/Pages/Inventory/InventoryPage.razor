@@ -1,137 +1,145 @@
 @page "/inventory"
-@rendermode InteractiveServer
-@using StockScanTool.Web.Services
 @inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
-<h3>Inventory Management</h3>
+<PageTitle>Inventory - StockScanTool</PageTitle>
 
-@if (showForm)
+<PageHeader Title="Inventory" ButtonText="Set Stock Level" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewInventory" />
+
+@if (loading)
 {
-    <div class="form-card">
-        <h4>Update Stock Level</h4>
-        <div class="form-grid">
-            <div class="form-group">
-                <label>Store</label>
-                <select @bind="selectedStoreId">
-                    <option value="0">-- All Stores --</option>
-                    @foreach (var s in stores)
-                    {
-                        <option value="@s.Id">@s.Name</option>
-                    }
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Product</label>
-                <select @bind="selectedProductId">
-                    <option value="0">-- Select Product --</option>
-                    @foreach (var p in products)
-                    {
-                        <option value="@p.Id">@p.Name (@p.Sku)</option>
-                    }
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Quantity On Hand</label>
-                <input type="number" min="0" @bind="quantity" />
-            </div>
-        </div>
-        <div class="form-actions">
-            <button class="btn btn-primary" @onclick="Save"
-                    disabled="@(selectedStoreId == 0 || selectedProductId == 0)">Save</button>
-            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
-        </div>
-        @if (!string.IsNullOrEmpty(error))
-        {
-            <p class="error">@error</p>
-        }
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
     </div>
 }
-
-@if (!showForm)
+else if (!string.IsNullOrEmpty(error))
 {
-    <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
-        <button class="btn btn-primary" @onclick="NewInventory">+ Set Stock Level</button>
-        <select @bind="filterStoreId" @bind:after="FilterChanged" style="padding:8px; border:1px solid #ddd; border-radius:4px;">
-            <option value="0">All Stores</option>
-            @foreach (var s in stores)
-            {
-                <option value="@s.Id">@s.Name</option>
-            }
-        </select>
-    </div>
-}
-
-@if (items is null)
-{
-    <p>Loading...</p>
+    <ErrorAlert Message="@error" />
 }
 else
 {
-    <table class="data-table">
-        <thead>
-            <tr><th>Product</th><th>Barcode</th><th>Store</th><th>Qty On Hand</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var i in items)
-            {
-                <tr class="@(i.QuantityOnHand == 0 ? "row-danger" : i.QuantityOnHand <= 5 ? "row-warning" : "")">
-                    <td>@i.ProductName</td>
-                    <td><code>@i.ProductBarcode</code></td>
-                    <td>@i.StoreName</td>
-                    <td>@i.QuantityOnHand</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <MudDataGrid T="InventoryDto" Items="@FilteredInventory" Hover="true" Dense="true"
+                 SortMode="SortMode.Single" Elevation="2" Style="border-radius:12px;overflow:hidden;"
+                 Filterable="true" Groupable="false"
+                 RowClassFunc="@((item, _) => item.QuantityOnHand == 0 ? "row-danger" : item.QuantityOnHand <= 5 ? "row-warning" : "")">
+        <ToolBarContent>
+            <MudSelect T="int" @bind-Value="filterStoreId" Label="Filter by Store" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Style="max-width:200px;" Clearable="true">
+                <MudSelectItem Value="0">All Stores</MudSelectItem>
+                @foreach (var s in stores)
+                {
+                    <MudSelectItem Value="@s.Id">@s.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSpacer />
+            <MudTextField @bind-Value="searchText" Placeholder="Search products..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium" Immediate="true"
+                          DebounceInterval="300" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:300px;" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.ProductName" Title="Product" />
+            <PropertyColumn Property="x => x.ProductBarcode" Title="Barcode">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.QrCode">
+                        @context.Item.ProductBarcode
+                    </MudChip>
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.StoreName" Title="Store" />
+            <PropertyColumn Property="x => x.QuantityOnHand" Title="Qty On Hand">
+                <CellTemplate>
+                    @if (context.Item.QuantityOnHand == 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">
+                            @context.Item.QuantityOnHand
+                        </MudChip>
+                    }
+                    else if (context.Item.QuantityOnHand <= 5)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                            @context.Item.QuantityOnHand
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">
+                            @context.Item.QuantityOnHand
+                        </MudChip>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => Edit(context.Item)" Title="Edit" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <MudText Style="padding:16px;color:#757575;">No inventory records found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="InventoryDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudDataGrid>
 }
 
 @code {
     private List<InventoryDto>? items;
     private List<StoreDto> stores = new();
     private List<ProductDto> products = new();
-    private bool showForm;
     private string error = "";
-
+    private bool loading = true;
+    private string searchText = "";
     private int filterStoreId;
-    private int selectedStoreId, selectedProductId, quantity;
+
+    private IEnumerable<InventoryDto> FilteredInventory => items?.Where(i =>
+        (filterStoreId == 0 || i.StoreId == filterStoreId) &&
+        (string.IsNullOrEmpty(searchText) ||
+         i.ProductName.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+         i.ProductBarcode.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+    ) ?? [];
 
     protected override async Task OnInitializedAsync()
     {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
         try
         {
-            stores = await Api.GetStores();
-            products = await Api.GetProducts();
-            items = await Api.GetInventory();
+            stores = (await Api.GetStores()).ToList();
+            products = (await Api.GetProducts()).ToList();
+            items = (await Api.GetInventory()).ToList();
+            error = "";
         }
-        catch
+        catch (UnauthorizedAccessException) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        catch { error = "Could not connect to the API."; }
+        loading = false;
+    }
+
+    private void NewInventory() => ShowDialog(null);
+    private void Edit(InventoryDto item) => ShowDialog(item);
+
+    private async Task ShowDialog(InventoryDto? item)
+    {
+        var parameters = new DialogParameters<InventoryDialog>
         {
-            error = "Could not connect to the API. Make sure the API server is running.";
-        }
-    }
-
-    private async Task FilterChanged()
-    {
-        items = filterStoreId == 0
-            ? await Api.GetInventory()
-            : await Api.GetInventoryByStore(filterStoreId);
-    }
-
-    private void NewInventory()
-    {
-        selectedStoreId = selectedProductId = 0; quantity = 0;
-        showForm = true; error = "";
-    }
-
-    private void Cancel() { showForm = false; error = ""; }
-
-    private async Task Save()
-    {
-        try
-        {
-            await Api.UpsertInventory(new UpdateInventoryRequest(selectedProductId, selectedStoreId, quantity));
-            showForm = false;
-            await FilterChanged();
-        }
-        catch (Exception ex) { error = ex.Message; }
+            { x => x.Item, item },
+            { x => x.Stores, stores },
+            { x => x.Products, products },
+            { x => x.OnSave, EventCallback.Factory.Create(this, LoadData) }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<InventoryDialog>(item == null ? "Set Stock Level" : "Update Stock Level", parameters, options);
     }
 }

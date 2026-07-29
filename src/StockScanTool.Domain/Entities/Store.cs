@@ -1,8 +1,7 @@
 namespace StockScanTool.Domain.Entities;
 
-public class Store
+public class Store : AuditableEntity
 {
-    public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;

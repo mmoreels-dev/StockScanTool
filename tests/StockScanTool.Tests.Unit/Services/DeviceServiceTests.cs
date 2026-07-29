@@ -1,10 +1,11 @@
 using Xunit;
 using Moq;
 using FluentAssertions;
-using StockScanTool.Api.Services;
+using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Contracts;
 using StockScanTool.Domain.Entities;
+using FluentValidation;
 
 namespace StockScanTool.Tests.Unit.Services;
 
@@ -13,6 +14,8 @@ public class DeviceServiceTests
     private readonly Mock<IScanningDeviceRepository> _deviceRepoMock;
     private readonly Mock<IStoreRepository> _storeRepoMock;
     private readonly Mock<IUnitOfWork> _unitOfWorkMock;
+    private readonly Mock<IValidator<CreateDeviceRequest>> _createValidatorMock;
+    private readonly Mock<IValidator<UpdateDeviceRequest>> _updateValidatorMock;
     private readonly DeviceService _sut;
 
     public DeviceServiceTests()
@@ -20,7 +23,13 @@ public class DeviceServiceTests
         _deviceRepoMock = new Mock<IScanningDeviceRepository>();
         _storeRepoMock = new Mock<IStoreRepository>();
         _unitOfWorkMock = new Mock<IUnitOfWork>();
-        _sut = new DeviceService(_deviceRepoMock.Object, _storeRepoMock.Object, _unitOfWorkMock.Object);
+        _createValidatorMock = new Mock<IValidator<CreateDeviceRequest>>();
+        _updateValidatorMock = new Mock<IValidator<UpdateDeviceRequest>>();
+        _createValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateDeviceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult());
+        _updateValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateDeviceRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult());
+        _sut = new DeviceService(_deviceRepoMock.Object, _storeRepoMock.Object, _unitOfWorkMock.Object, _createValidatorMock.Object, _updateValidatorMock.Object);
     }
 
     [Fact]
@@ -34,6 +43,8 @@ public class DeviceServiceTests
         };
         _deviceRepoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(devices);
         _storeRepoMock.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(store);
+        _storeRepoMock.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Store, bool>>>()))
+            .ReturnsAsync(new List<Store> { store });
 
         var result = await _sut.GetAllAsync();
 
@@ -50,6 +61,8 @@ public class DeviceServiceTests
         var device = new ScanningDevice { Id = 1, DeviceName = "Scanner 1", StoreId = 1, ApiKey = "key1", IsActive = true };
         _deviceRepoMock.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(device);
         _storeRepoMock.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(store);
+        _storeRepoMock.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Store, bool>>>()))
+            .ReturnsAsync(new List<Store> { store });
 
         var result = await _sut.GetByIdAsync(1);
 

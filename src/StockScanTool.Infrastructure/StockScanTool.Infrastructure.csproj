@@ -15,12 +15,14 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.4" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\StockScanTool.Domain\StockScanTool.Domain.csproj" />
     <ProjectReference Include="..\StockScanTool.Application\StockScanTool.Application.csproj" />
+    <ProjectReference Include="..\StockScanTool.Contracts\StockScanTool.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

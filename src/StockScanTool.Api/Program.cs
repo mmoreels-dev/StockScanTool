@@ -1,13 +1,18 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using StockScanTool.Api.Authorization;
 using StockScanTool.Api.Middleware;
-using StockScanTool.Api.Services;
-using StockScanTool.Application.Services;
 using StockScanTool.Infrastructure;
 using StockScanTool.Infrastructure.Data;
+using StockScanTool.Infrastructure.Services;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,7 +43,25 @@ builder.Services.AddInfrastructure(connectionString, useSqlite);
 
 // --- JWT Settings ---
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
-var jwtKey = builder.Configuration["JwtSettings:SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured.");
+
+var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+    ?? builder.Configuration["JwtSettings:SecretKey"];
+if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        jwtKey = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+        builder.Configuration["JwtSettings:SecretKey"] = jwtKey;
+    }
+    else
+    {
+        throw new InvalidOperationException(
+            "JWT SecretKey must be at least 32 characters long. " +
+            "Set the JWT_SECRET_KEY environment variable or JwtSettings:SecretKey in configuration.");
+    }
+}
+
+builder.Configuration["JwtSettings:SecretKey"] = jwtKey;
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -54,17 +77,43 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
-builder.Services.AddAuthorization();
 
-// --- Application Services ---
-builder.Services.AddScoped<IStoreService, StoreService>();
-builder.Services.AddScoped<IProductService, ProductService>();
-builder.Services.AddScoped<IDeviceService, DeviceService>();
-builder.Services.AddScoped<IInventoryService, InventoryService>();
-builder.Services.AddScoped<ISaleService, SaleService>();
-builder.Services.AddScoped<IDashboardService, DashboardService>();
-builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddScoped<AuthService>();
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+
+builder.Services.AddAuthorization(options =>
+{
+    var permissions = new[]
+    {
+        "dashboard.read",
+        "stores.read", "stores.create", "stores.update", "stores.delete",
+        "products.read", "products.create", "products.update", "products.delete",
+        "devices.read", "devices.create", "devices.update", "devices.delete",
+        "inventory.read", "inventory.create", "inventory.update",
+        "sales.read", "sales.create",
+        "users.read", "users.create", "users.update", "users.delete",
+        "roles.read", "roles.create", "roles.update", "roles.delete",
+        "scanning.sell"
+    };
+
+    foreach (var permission in permissions)
+    {
+        options.AddPolicy($"{HasPermissionAttribute.PolicyPrefix}{permission}",
+            policy => policy.Requirements.Add(new PermissionRequirement(permission)));
+    }
+});
+
+// --- Rate Limiting ---
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("auth", limiterOptions =>
+    {
+        limiterOptions.PermitLimit = 10;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 0;
+    });
+});
 
 // --- Controllers + OpenAPI ---
 builder.Services.AddControllers();
@@ -106,7 +155,11 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? ["https://localhost:5443", "http://localhost:5000", "http://localhost:5050"];
+        policy.WithOrigins(origins)
+              .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+              .WithHeaders("Authorization", "Content-Type", "Accept");
     });
 });
 
@@ -116,12 +169,40 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await context.Database.EnsureCreatedAsync();
+    try
+    {
+        if (context.Database.IsRelational())
+            await context.Database.MigrateAsync();
+        else
+            await context.Database.EnsureCreatedAsync();
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or SqliteException)
+    {
+        if (app.Environment.IsDevelopment())
+        {
+            await context.Database.EnsureDeletedAsync();
+            await context.Database.EnsureCreatedAsync();
+        }
+        else
+        {
+            await context.Database.EnsureCreatedAsync();
+        }
+    }
     await SeedData.InitializeAsync(context);
 }
 
+// --- Static Files ---
+var webRoot = app.Environment.WebRootPath;
+if (webRoot is not null && !Directory.Exists(Path.Combine(webRoot, "uploads", "products")))
+    Directory.CreateDirectory(Path.Combine(webRoot, "uploads", "products"));
+
+app.UseStaticFiles();
+
 // --- Pipeline ---
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+app.UseCors();
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {
@@ -133,7 +214,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -9,6 +9,13 @@ public class SaleTransactionRepository : Repository<SaleTransaction>, ISaleTrans
 {
     public SaleTransactionRepository(AppDbContext db) : base(db) { }
 
+    public async Task<SaleTransaction?> GetByIdWithIncludesAsync(int id)
+        => await _set
+            .Include(s => s.Store)
+            .Include(s => s.ScanningDevice)
+            .Include(s => s.SaleItems).ThenInclude(i => i.Product)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
     public override async Task<List<SaleTransaction>> GetAllAsync()
         => await _set
             .Include(s => s.Store)

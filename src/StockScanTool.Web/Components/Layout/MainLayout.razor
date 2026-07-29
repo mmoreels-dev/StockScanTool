@@ -1,96 +1,91 @@
 ﻿@inherits LayoutComponentBase
-@using StockScanTool.Web.Services
-@inject ApiClient Api
+@inject AuthStateService AuthState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@using StockScanTool.Shared.Themes
 
-@if (_isLoginRoute)
-{
-    @Body
-}
-else if (!Api.IsAuthenticated)
-{
-    <div class="login-container">
-        <div class="login-card">
-            <p>Redirecting to login...</p>
+<MudThemeProvider Theme="StockScanToolTheme.Default" />
+
+<MudLayout>
+    <MudAppBar Elevation="0">
+        <MudSpacer />
+        <MudText Typo="Typo.h6" Style="color:white;font-weight:600;">StockScanTool</MudText>
+        <MudSpacer />
+        <MudText Typo="Typo.body2" Style="color:#FF6D00;margin-right:12px;">@displayName</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit"
+                       OnClick="Logout" Title="Logout" />
+    </MudAppBar>
+
+    <MudDrawer Open="true" Fixed="true"
+               Elevation="2">
+        <MudDrawerHeader>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;">
+                <div style="width:36px;height:36px;background:#FF6D00;border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:1rem;">S</div>
+                <MudText Typo="Typo.h6" Style="color:white;font-weight:600;">StockScanTool</MudText>
+            </div>
+        </MudDrawerHeader>
+        <MudNavMenu>
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                Dashboard
+            </MudNavLink>
+            <MudNavLink Href="/stores" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Store">
+                Stores
+            </MudNavLink>
+            <MudNavLink Href="/products" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Inventory2">
+                Products
+            </MudNavLink>
+            <MudNavLink Href="/devices" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.DeviceHub">
+                Devices
+            </MudNavLink>
+            <MudNavLink Href="/inventory" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Warehouse">
+                Inventory
+            </MudNavLink>
+            <MudNavLink Href="/sales" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Receipt">
+                Sales
+            </MudNavLink>
+            <MudDivider Style="margin:8px 0;background:#333;" />
+            <MudText Typo="Typo.caption" Style="color:#757575;padding:4px 16px;text-transform:uppercase;">Administration</MudText>
+            <MudNavLink Href="/users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">
+                Users
+            </MudNavLink>
+            <MudNavLink Href="/roles" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ManageAccounts">
+                Roles
+            </MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent Style="background:#F5F5F5;min-height:100vh;">
+        <div style="padding:24px;">
+            @Body
         </div>
-    </div>
-}
-else
-{
-    <div class="layout">
-        <nav class="sidebar">
-            <div class="sidebar-brand">
-                <h3>StockScanTool</h3>
-            </div>
-            <ul class="nav-menu">
-                <li><a href="/" class="nav-link">Dashboard</a></li>
-                <li><a href="/devices" class="nav-link">Devices</a></li>
-                <li><a href="/products" class="nav-link">Products</a></li>
-                <li><a href="/inventory" class="nav-link">Inventory</a></li>
-                <li><a href="/sales" class="nav-link">Sales</a></li>
-            </ul>
-            <div class="sidebar-footer">
-                <button class="btn btn-logout" @onclick="HandleLogout">Logout</button>
-            </div>
-        </nav>
-        <main class="content">
-            <div class="top-bar">
-                <h4>Admin Dashboard</h4>
-            </div>
-            <div class="page-body">
-                @Body
-            </div>
-        </main>
-    </div>
-}
+    </MudMainContent>
+</MudLayout>
 
 @code {
-    private bool _isLoginRoute;
-    private bool _tokenFromUrl;
+    private string displayName = "User";
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        var uri = new Uri(Nav.Uri);
-        _isLoginRoute = uri.AbsolutePath.TrimStart('/').Equals("login", StringComparison.OrdinalIgnoreCase);
-
-        if (_isLoginRoute)
-            return;
-
-        if (!Api.IsAuthenticated)
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated)
         {
-            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-            var token = query["token"];
-            if (!string.IsNullOrEmpty(token))
-            {
-                Api.SetToken(token);
-                _tokenFromUrl = true;
-                return;
-            }
-
             Nav.NavigateTo("/login", forceLoad: true);
+            return;
         }
-    }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_tokenFromUrl)
+        try
         {
-            try
-            {
-                await JS.InvokeVoidAsync("history.replaceState", null, "", "/");
-                _tokenFromUrl = false;
-            }
-            catch
-            {
-                // JS not available during prerender, will retry on next render
-            }
+            var info = await JS.InvokeAsync<object>("authGetUserInfo");
+            var dict = info as System.Text.Json.JsonElement?;
+            if (dict.HasValue && dict.Value.TryGetProperty("displayName", out var name))
+                displayName = name.GetString() ?? "User";
         }
+        catch { }
     }
 
-    private void HandleLogout()
+    private async Task Logout()
     {
-        Api.Logout();
+        await AuthState.LogoutAsync();
         Nav.NavigateTo("/login", forceLoad: true);
     }
 }

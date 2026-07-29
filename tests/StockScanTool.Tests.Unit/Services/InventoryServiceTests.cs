@@ -1,10 +1,11 @@
 using Xunit;
 using Moq;
 using FluentAssertions;
-using StockScanTool.Api.Services;
+using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Contracts;
 using StockScanTool.Domain.Entities;
+using FluentValidation;
 
 namespace StockScanTool.Tests.Unit.Services;
 
@@ -12,13 +13,17 @@ public class InventoryServiceTests
 {
     private readonly Mock<IInventoryRepository> _inventoryRepoMock;
     private readonly Mock<IUnitOfWork> _unitOfWorkMock;
+    private readonly Mock<IValidator<UpdateInventoryRequest>> _validatorMock;
     private readonly InventoryService _sut;
 
     public InventoryServiceTests()
     {
         _inventoryRepoMock = new Mock<IInventoryRepository>();
         _unitOfWorkMock = new Mock<IUnitOfWork>();
-        _sut = new InventoryService(_inventoryRepoMock.Object, _unitOfWorkMock.Object);
+        _validatorMock = new Mock<IValidator<UpdateInventoryRequest>>();
+        _validatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateInventoryRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult());
+        _sut = new InventoryService(_inventoryRepoMock.Object, _unitOfWorkMock.Object, _validatorMock.Object);
     }
 
     [Fact]

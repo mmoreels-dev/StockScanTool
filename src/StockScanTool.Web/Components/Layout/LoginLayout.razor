@@ -1,5 +1,10 @@
 @inherits LayoutComponentBase
+@using StockScanTool.Shared.Themes
 
-<div class="login-container">
-    @Body
-</div>
+<MudThemeProvider Theme="StockScanToolTheme.Minimal" />
+
+<MudLayout>
+    <MudMainContent Style="background:#1A1A2E;min-height:100vh;display:flex;align-items:center;justify-content:center;">
+        @Body
+    </MudMainContent>
+</MudLayout>

@@ -22,6 +22,9 @@ public class Repository<T> : IRepository<T> where T : class
     public virtual async Task<List<T>> GetAllAsync()
         => await _set.ToListAsync();
 
+    public virtual IQueryable<T> AsQueryable()
+        => _set.AsQueryable();
+
     public virtual async Task<List<T>> FindAsync(Expression<Func<T, bool>> predicate)
         => await _set.Where(predicate).ToListAsync();
 

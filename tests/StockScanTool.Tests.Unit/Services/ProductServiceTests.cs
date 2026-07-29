@@ -1,10 +1,11 @@
 using Xunit;
 using Moq;
 using FluentAssertions;
-using StockScanTool.Api.Services;
+using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Contracts;
 using StockScanTool.Domain.Entities;
+using FluentValidation;
 
 namespace StockScanTool.Tests.Unit.Services;
 
@@ -12,13 +13,21 @@ public class ProductServiceTests
 {
     private readonly Mock<IProductRepository> _repoMock;
     private readonly Mock<IUnitOfWork> _unitOfWorkMock;
+    private readonly Mock<IValidator<CreateProductRequest>> _createValidatorMock;
+    private readonly Mock<IValidator<UpdateProductRequest>> _updateValidatorMock;
     private readonly ProductService _sut;
 
     public ProductServiceTests()
     {
         _repoMock = new Mock<IProductRepository>();
         _unitOfWorkMock = new Mock<IUnitOfWork>();
-        _sut = new ProductService(_repoMock.Object, _unitOfWorkMock.Object);
+        _createValidatorMock = new Mock<IValidator<CreateProductRequest>>();
+        _updateValidatorMock = new Mock<IValidator<UpdateProductRequest>>();
+        _createValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateProductRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult());
+        _updateValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateProductRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult());
+        _sut = new ProductService(_repoMock.Object, _unitOfWorkMock.Object, _createValidatorMock.Object, _updateValidatorMock.Object);
     }
 
     [Fact]
@@ -124,6 +133,20 @@ public class ProductServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_ThrowsValidationException_WhenInvalid()
+    {
+        _createValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateProductRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult([
+                new FluentValidation.Results.ValidationFailure("Name", "Name is required.")]));
+
+        var request = new CreateProductRequest("W2", "", "Premium widget", "345678", 29.99m);
+
+        var act = () => _sut.CreateAsync(request);
+
+        await act.Should().ThrowAsync<FluentValidation.ValidationException>();
+    }
+
+    [Fact]
     public async Task UpdateAsync_UpdatesEntityAndReturnsDto()
     {
         var existing = new Product { Id = 1, Sku = "W1", Name = "Widget", Description = "Old", Barcode = "123456", Price = 9.99m };
@@ -179,6 +202,7 @@ public class ProductServiceTests
             .Select(i => new Product { Id = i, Sku = $"P{i}", Name = $"Product {i}", Description = $"Desc {i}", Barcode = $"{i:D6}", Price = i * 10m })
             .ToList();
         _repoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(products);
+        _repoMock.Setup(r => r.AsQueryable()).Returns(products.AsAsyncQueryable());
 
         var result = await _sut.GetPagedAsync(new PagedRequest(Page: 2, PageSize: 10));
 

@@ -1,30 +1,61 @@
-using StockScanTool.Contracts;
+using System.Net.Http.Json;
 using Microsoft.JSInterop;
+using StockScanTool.Contracts;
+using StockScanTool.Shared.Services;
 
 namespace StockScanTool.Web.Services;
 
-public class ApiClient
+public class ApiClient : BaseApiService
 {
-    private readonly HttpClient _http;
-    private string? _token;
+    private readonly IJSRuntime _js;
+    private readonly AuthStateService _auth;
+    private bool _tokenAttached;
 
-    public ApiClient(HttpClient http) => _http = http;
+    public ApiClient(HttpClient http, IJSRuntime js, AuthStateService auth) : base(http)
+    {
+        _js = js;
+        _auth = auth;
+        var baseUrl = http.BaseAddress?.ToString();
+        if (!string.IsNullOrEmpty(baseUrl))
+            SetBaseUrl(baseUrl);
+    }
 
-    public bool IsAuthenticated => !string.IsNullOrEmpty(_token);
+    protected override async Task EnsureAuthenticatedAsync()
+    {
+        if (_tokenAttached && _auth.IsAuthenticated) return;
+
+        await _auth.InitializeAsync();
+
+        if (_auth.IsAuthenticated && !string.IsNullOrEmpty(_auth.Token))
+        {
+            _token = _auth.Token;
+            AttachToken();
+            _tokenAttached = true;
+        }
+        else
+        {
+            ClearToken();
+            _tokenAttached = false;
+        }
+    }
+
+    protected override async Task OnUnauthorizedAsync()
+    {
+        await _auth.LogoutAsync();
+        _token = string.Empty;
+        _tokenAttached = false;
+        ClearToken();
+    }
 
     public void SetToken(string token)
     {
+        _auth.SetToken(token);
         _token = token;
-        _http.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        AttachToken();
+        _tokenAttached = true;
     }
 
-    public void Logout()
-    {
-        _token = null;
-        _http.DefaultRequestHeaders.Authorization = null;
-    }
-
+    // ── Stores ──────────────────────────────────────────
     public async Task<List<StoreDto>> GetStores()
         => await GetAsync<List<StoreDto>>(ApiRoutes.Stores.Base) ?? [];
 
@@ -40,6 +71,7 @@ public class ApiClient
     public async Task DeleteStore(int id)
         => await DeleteAsync($"{ApiRoutes.Stores.Base}/{id}");
 
+    // ── Products ────────────────────────────────────────
     public async Task<List<ProductDto>> GetProducts()
         => await GetAsync<List<ProductDto>>(ApiRoutes.Products.Base) ?? [];
 
@@ -55,6 +87,13 @@ public class ApiClient
     public async Task DeleteProduct(int id)
         => await DeleteAsync($"{ApiRoutes.Products.Base}/{id}");
 
+    public async Task<ProductDto> UploadProductImage(int productId, Stream imageStream, string fileName)
+        => (await UploadAsync<ProductDto>($"{ApiRoutes.Products.Base}/{productId}/image", imageStream, fileName))!;
+
+    public async Task DeleteProductImage(int productId)
+        => await DeleteAsync($"{ApiRoutes.Products.Base}/{productId}/image");
+
+    // ── Devices ─────────────────────────────────────────
     public async Task<List<DeviceDto>> GetDevices()
         => await GetAsync<List<DeviceDto>>(ApiRoutes.Devices.Base) ?? [];
 
@@ -70,6 +109,7 @@ public class ApiClient
     public async Task DeleteDevice(int id)
         => await DeleteAsync($"{ApiRoutes.Devices.Base}/{id}");
 
+    // ── Inventory ───────────────────────────────────────
     public async Task<List<InventoryDto>> GetInventory()
         => await GetAsync<List<InventoryDto>>(ApiRoutes.Inventory.Base) ?? [];
 
@@ -79,39 +119,70 @@ public class ApiClient
     public async Task<InventoryDto> UpsertInventory(UpdateInventoryRequest r)
         => (await PutAsync<InventoryDto, UpdateInventoryRequest>(ApiRoutes.Inventory.Base, r))!;
 
+    // ── Sales ───────────────────────────────────────────
     public async Task<List<SaleTransactionDto>> GetSales()
         => await GetAsync<List<SaleTransactionDto>>(ApiRoutes.Sales.Base) ?? [];
 
     public async Task<List<SaleTransactionDto>> GetSalesByStore(int storeId)
         => await GetAsync<List<SaleTransactionDto>>($"{ApiRoutes.Sales.Base}/store/{storeId}") ?? [];
 
+    // ── Dashboard ───────────────────────────────────────
     public async Task<DashboardSummaryDto> GetDashboard()
         => (await GetAsync<DashboardSummaryDto>(ApiRoutes.Dashboard.Base))!;
 
-    private async Task<T?> GetAsync<T>(string url)
-    {
-        var resp = await _http.GetAsync(url);
-        resp.EnsureSuccessStatusCode();
-        return await resp.Content.ReadFromJsonAsync<T>();
-    }
+    // ── Users ────────────────────────────────────────────
+    public async Task<List<UserDto>> GetUsers()
+        => await GetAsync<List<UserDto>>(ApiRoutes.Users.Base) ?? [];
 
-    private async Task<TOut?> PostAsync<TOut, TIn>(string url, TIn body)
-    {
-        var resp = await _http.PostAsJsonAsync(url, body);
-        resp.EnsureSuccessStatusCode();
-        return await resp.Content.ReadFromJsonAsync<TOut>();
-    }
+    public async Task<UserDto?> GetUser(int id)
+        => await GetAsync<UserDto>($"{ApiRoutes.Users.Base}/{id}");
 
-    private async Task<TOut?> PutAsync<TOut, TIn>(string url, TIn body)
-    {
-        var resp = await _http.PutAsJsonAsync(url, body);
-        resp.EnsureSuccessStatusCode();
-        return await resp.Content.ReadFromJsonAsync<TOut>();
-    }
+    public async Task<UserDto> CreateUser(CreateUserRequest r)
+        => (await PostAsync<UserDto, CreateUserRequest>(ApiRoutes.Users.Base, r))!;
 
-    private async Task DeleteAsync(string url)
+    public async Task<UserDto?> UpdateUser(int id, UpdateUserRequest r)
+        => await PutAsync<UserDto, UpdateUserRequest>($"{ApiRoutes.Users.Base}/{id}", r);
+
+    public async Task DeleteUser(int id)
+        => await DeleteAsync($"{ApiRoutes.Users.Base}/{id}");
+
+    // ── Roles ────────────────────────────────────────────
+    public async Task<List<RoleDto>> GetRoles()
+        => await GetAsync<List<RoleDto>>(ApiRoutes.Roles.Base) ?? [];
+
+    public async Task<RoleDto?> GetRole(int id)
+        => await GetAsync<RoleDto>($"{ApiRoutes.Roles.Base}/{id}");
+
+    public async Task<RoleDto> CreateRole(CreateRoleRequest r)
+        => (await PostAsync<RoleDto, CreateRoleRequest>(ApiRoutes.Roles.Base, r))!;
+
+    public async Task<RoleDto?> UpdateRole(int id, UpdateRoleRequest r)
+        => await PutAsync<RoleDto, UpdateRoleRequest>($"{ApiRoutes.Roles.Base}/{id}", r);
+
+    public async Task DeleteRole(int id)
+        => await DeleteAsync($"{ApiRoutes.Roles.Base}/{id}");
+
+    // ── Permissions ─────────────────────────────────────
+    public async Task<List<PermissionDto>> GetPermissions()
+        => await GetAsync<List<PermissionDto>>(ApiRoutes.Permissions.Base) ?? [];
+
+    // ── Multipart Upload ────────────────────────────────
+    private async Task<T?> UploadAsync<T>(string url, Stream imageStream, string fileName) where T : class
     {
-        var resp = await _http.DeleteAsync(url);
-        resp.EnsureSuccessStatusCode();
+        return await ExecuteWithRetryAsync(async () =>
+        {
+            await EnsureAuthenticatedAsync();
+            using var content = new MultipartFormDataContent();
+            content.Add(new StreamContent(imageStream), "file", fileName);
+            var resp = await _http.PostAsync(FullUri(url), content);
+            if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                await OnUnauthorizedAsync();
+                throw new UnauthorizedAccessException("Session expired. Please log in again.");
+            }
+            resp.EnsureSuccessStatusCode();
+            var apiResp = await resp.Content.ReadFromJsonAsync<ApiResponse<T>>(JsonOpts);
+            return apiResp?.Data;
+        });
     }
 }

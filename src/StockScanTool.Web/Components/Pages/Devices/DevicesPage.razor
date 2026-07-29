@@ -1,166 +1,138 @@
 @page "/devices"
-@rendermode InteractiveServer
-@using StockScanTool.Web.Services
 @inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
-<h3>Device Management</h3>
+<PageTitle>Devices - StockScanTool</PageTitle>
 
-@if (showForm)
+<PageHeader Title="Devices" ButtonText="Add Device" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewDevice" />
+
+@if (loading)
 {
-    <div class="form-card">
-        <h4>@(editingId is null ? "Register New Device" : "Edit Device")</h4>
-        <div class="form-grid">
-            <div class="form-group">
-                <label>Device Name</label>
-                <input @bind="deviceName" placeholder="e.g. Scanner-01" />
-            </div>
-            <div class="form-group">
-                <label>Store</label>
-                <select @bind="storeId">
-                    <option value="0">-- Select Store --</option>
-                    @foreach (var s in stores)
-                    {
-                        <option value="@s.Id">@s.Name</option>
-                    }
-                </select>
-            </div>
-        </div>
-        <div class="form-actions">
-            <button class="btn btn-primary" @onclick="Save" disabled="@(string.IsNullOrWhiteSpace(deviceName) || storeId == 0)">Save</button>
-            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
-        </div>
-        @if (!string.IsNullOrEmpty(errorMessage))
-        {
-            <p class="error">@errorMessage</p>
-        }
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
     </div>
 }
-
-@if (!showForm)
+else if (!string.IsNullOrEmpty(error))
 {
-    <button class="btn btn-primary" @onclick="NewDevice">+ Add Device</button>
-}
-
-@if (devices is null)
-{
-    <p>Loading...</p>
+    <ErrorAlert Message="@error" />
 }
 else
 {
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Device Name</th>
-                <th>Store</th>
-                <th>API Key</th>
-                <th>Active</th>
-                <th>Last Ping</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var d in devices)
-            {
-                <tr>
-                    <td>@d.Id</td>
-                    <td>@d.DeviceName</td>
-                    <td>@d.StoreName</td>
-                    <td><code>@d.ApiKey</code></td>
-                    <td>@(d.IsActive ? "Yes" : "No")</td>
-                    <td>@(d.LastPing?.ToString("g") ?? "Never")</td>
-                    <td>
-                        <button class="btn btn-sm" @onclick="() => Edit(d)">Edit</button>
-                        <button class="btn btn-sm btn-danger" @onclick="() => Delete(d.Id)">Delete</button>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <MudDataGrid T="DeviceDto" Items="@FilteredDevices" Hover="true" Dense="true"
+                 SortMode="SortMode.Single" Elevation="2" Style="border-radius:12px;overflow:hidden;"
+                 Filterable="true" Groupable="false">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchText" Placeholder="Search devices..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium" Class="mt-0" Immediate="true"
+                          DebounceInterval="300" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:300px;" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.DeviceName" Title="Device Name" />
+            <PropertyColumn Property="x => x.StoreName" Title="Store" />
+            <PropertyColumn Property="x => x.IsActive" Title="Status">
+                <CellTemplate>
+                    @if (context.Item.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Active</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Inactive</MudChip>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.LastPing" Title="Last Ping">
+                <CellTemplate>
+                    @(context.Item.LastPing?.ToString("g") ?? "Never")
+                </CellTemplate>
+            </PropertyColumn>
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => Edit(context.Item)" Title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => Delete(context.Item)" Title="Delete" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <MudText Style="padding:16px;color:#757575;">No devices found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="DeviceDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudDataGrid>
 }
 
 @code {
     private List<DeviceDto>? devices;
     private List<StoreDto> stores = new();
-    private bool showForm;
-    private int? editingId;
-    private string errorMessage = "";
-    private string deviceName = "";
-    private int storeId;
+    private string error = "";
+    private bool loading = true;
+    private string searchText = "";
+
+    private IEnumerable<DeviceDto> FilteredDevices => devices?.Where(d =>
+        string.IsNullOrEmpty(searchText) ||
+        d.DeviceName.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        d.StoreName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+    ) ?? [];
 
     protected override async Task OnInitializedAsync()
     {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
         await LoadData();
     }
 
     private async Task LoadData()
     {
+        loading = true;
         try
         {
-            devices = await Api.GetDevices();
-            stores = await Api.GetStores();
+            devices = (await Api.GetDevices()).ToList();
+            stores = (await Api.GetStores()).ToList();
+            error = "";
         }
-        catch
+        catch (UnauthorizedAccessException) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        catch { error = "Could not connect to the API."; }
+        loading = false;
+    }
+
+    private void NewDevice() => ShowDialog(null);
+    private void Edit(DeviceDto device) => ShowDialog(device);
+
+    private async Task ShowDialog(DeviceDto? device)
+    {
+        var parameters = new DialogParameters<DeviceDialog>
         {
-            errorMessage = "Could not connect to the API. Make sure the API server is running.";
-        }
+            { x => x.Device, device },
+            { x => x.Stores, stores },
+            { x => x.OnSave, EventCallback.Factory.Create(this, LoadData) }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<DeviceDialog>(device == null ? "Add Device" : "Edit Device", parameters, options);
     }
 
-    private void NewDevice()
+    private async Task Delete(DeviceDto device)
     {
-        editingId = null;
-        deviceName = "";
-        storeId = 0;
-        showForm = true;
-        errorMessage = "";
-    }
-
-    private void Edit(DeviceDto d)
-    {
-        editingId = d.Id;
-        deviceName = d.DeviceName;
-        storeId = d.StoreId;
-        showForm = true;
-        errorMessage = "";
-    }
-
-    private void Cancel()
-    {
-        showForm = false;
-        errorMessage = "";
-    }
-
-    private async Task Save()
-    {
-        try
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Device",
+            $"Are you sure you want to delete \"{device.DeviceName}\"?",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
         {
-            if (editingId is null)
+            try
             {
-                await Api.CreateDevice(new CreateDeviceRequest(deviceName, storeId));
+                await Api.DeleteDevice(device.Id);
+                Snackbar.Add("Device deleted.", Severity.Success);
+                await LoadData();
             }
-            else
-            {
-                await Api.UpdateDevice(editingId.Value, new UpdateDeviceRequest(deviceName, storeId, true));
-            }
-            showForm = false;
-            await LoadData();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-        }
-    }
-
-    private async Task Delete(int id)
-    {
-        try
-        {
-            await Api.DeleteDevice(id);
-            await LoadData();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
         }
     }
 }

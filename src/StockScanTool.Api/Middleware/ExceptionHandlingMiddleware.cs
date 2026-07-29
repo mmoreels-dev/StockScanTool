@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace StockScanTool.Api.Middleware;
@@ -34,10 +35,11 @@ public class ExceptionHandlingMiddleware
 
         var (statusCode, detail) = exception switch
         {
+            ValidationException validationEx => (HttpStatusCode.BadRequest, string.Join("; ", validationEx.Errors.Select(e => e.ErrorMessage))),
             ArgumentException argEx => (HttpStatusCode.BadRequest, argEx.Message),
             KeyNotFoundException keyEx => (HttpStatusCode.NotFound, keyEx.Message),
             UnauthorizedAccessException => (HttpStatusCode.Unauthorized, "Unauthorized access."),
-            InvalidOperationException opEx => (HttpStatusCode.Conflict, opEx.Message),
+            InvalidOperationException opEx => (HttpStatusCode.InternalServerError, opEx.Message),
             _ => (HttpStatusCode.InternalServerError, "An unexpected error occurred.")
         };
 

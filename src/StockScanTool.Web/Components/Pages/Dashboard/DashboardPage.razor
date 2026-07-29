@@ -1,98 +1,189 @@
 @page "/"
-@rendermode InteractiveServer
-@using StockScanTool.Web.Services
 @inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
 
-<h3>Dashboard</h3>
+<PageTitle>Dashboard - StockScanTool</PageTitle>
 
-@if (!string.IsNullOrEmpty(error))
+<PageHeader Title="Dashboard" />
+
+@if (!initialized)
 {
-    <div class="error-banner">@error</div>
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
+    </div>
 }
-
-@if (summary is null && string.IsNullOrEmpty(error))
+else if (!string.IsNullOrEmpty(error))
 {
-    <p>Loading...</p>
+    <ErrorAlert Message="@error" />
 }
 else if (summary is not null)
 {
-    <div class="stat-cards">
-        <div class="stat-card">
-            <div class="stat-value">@summary.TotalStores</div>
-            <div class="stat-label">Stores</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">@summary.TotalProducts</div>
-            <div class="stat-label">Products</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">@summary.TotalDevices</div>
-            <div class="stat-label">Devices</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">@summary.TotalSalesRevenue.ToString("C")</div>
-            <div class="stat-label">Total Revenue</div>
-        </div>
-    </div>
+    <MudGrid Gutter="Gutter.Default">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;border-left:4px solid #FF6D00;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Store" Size="Size.Large" Style="color:#FF6D00;" />
+                    <div>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;">@summary.TotalStores</MudText>
+                        <MudText Typo="Typo.body2" Style="color:#757575;">Stores</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;border-left:4px solid #FF6D00;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Large" Style="color:#FF6D00;" />
+                    <div>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;">@summary.TotalProducts</MudText>
+                        <MudText Typo="Typo.body2" Style="color:#757575;">Products</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;border-left:4px solid #FF6D00;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <MudIcon Icon="@Icons.Material.Filled.DeviceHub" Size="Size.Large" Style="color:#FF6D00;" />
+                    <div>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;">@summary.TotalDevices</MudText>
+                        <MudText Typo="Typo.body2" Style="color:#757575;">Devices</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;border-left:4px solid #2E7D32;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Size="Size.Large" Style="color:#2E7D32;" />
+                    <div>
+                        <MudText Typo="Typo.h3" Style="font-weight:700;color:#2E7D32;">@summary.TotalSalesRevenue.ToString("N0")</MudText>
+                        <MudText Typo="Typo.body2" Style="color:#757575;">Revenue</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 
-    <div class="panels">
-        <div class="panel">
-            <h4>Sales by Store</h4>
-            @if (summary.SalesByStore?.Any() == true)
-            {
-                <table class="data-table">
-                    <thead><tr><th>Store</th><th>Transactions</th><th>Revenue</th></tr></thead>
-                    <tbody>
-                        @foreach (var s in summary.SalesByStore.OrderByDescending(x => x.TotalRevenue))
-                        {
-                            <tr>
-                                <td>@s.StoreName</td>
-                                <td>@s.TransactionCount</td>
-                                <td>@s.TotalRevenue.ToString("C")</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            }
-            else
-            {
-                <p class="empty">No sales recorded yet.</p>
-            }
-        </div>
+    <MudGrid Gutter="Gutter.Default" Style="margin-top:24px;">
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;">
+                <MudText Typo="Typo.h6" Style="font-weight:600;margin-bottom:16px;">
+                    <MudIcon Icon="@Icons.Material.Filled.BarChart" Style="margin-right:8px;vertical-align:middle;" />
+                    Sales by Store
+                </MudText>
+                @if (summary.SalesByStore?.Any() == true)
+                {
+                    var chartData = summary.SalesByStore.OrderByDescending(x => x.TotalRevenue).ToList();
+                    var labels = chartData.Select(s => s.StoreName).ToArray();
+                    var values = chartData.Select(s => s.TotalRevenue).Select(v => (double)v).ToArray();
 
-        <div class="panel">
-            <h4>Stock Levels</h4>
-            @if (summary.StockLevels?.Any() == true)
-            {
-                <table class="data-table">
-                    <thead><tr><th>Product</th><th>Store</th><th>Qty</th></tr></thead>
-                    <tbody>
-                        @foreach (var s in summary.StockLevels)
-                        {
-                            <tr class="@(s.QuantityOnHand == 0 ? "row-danger" : s.QuantityOnHand <= 5 ? "row-warning" : "")">
-                                <td>@s.ProductName</td>
-                                <td>@s.StoreName</td>
-                                <td>@s.QuantityOnHand</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            }
-            else
-            {
-                <p class="empty">No inventory data.</p>
-            }
-        </div>
-    </div>
+                    <MudChart ChartType="ChartType.Donut"
+                              InputData="@values"
+                              InputLabels="@labels"
+                              ChartOptions="@_chartOptions"
+                              Width="100%"
+                              Height="250px" />
+
+                    <MudDivider Style="margin:16px 0;" />
+
+                    <MudDataGrid T="StoreSalesSummaryDto" Items="@chartData" Hover="true" Dense="true"
+                                 SortMode="SortMode.Single" Elevation="0">
+                        <Columns>
+                            <PropertyColumn Property="x => x.StoreName" Title="Store" />
+                            <PropertyColumn Property="x => x.TransactionCount" Title="Txns" />
+                            <PropertyColumn Property="x => x.TotalRevenue" Title="Revenue" Format="C" />
+                        </Columns>
+                    </MudDataGrid>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Style="color:#757575;font-style:italic;">No sales recorded yet.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;">
+                <MudText Typo="Typo.h6" Style="font-weight:600;margin-bottom:16px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Inventory" Style="margin-right:8px;vertical-align:middle;" />
+                    Stock Levels
+                </MudText>
+                @if (summary.StockLevels?.Any() == true)
+                {
+                    var stockData = summary.StockLevels.ToList();
+                    var stockLabels = stockData.Select(s => s.ProductName).ToArray();
+                    var stockValues = stockData.Select(s => (double)s.QuantityOnHand).ToArray();
+                    var stockColors = stockData.Select(s => s.QuantityOnHand == 0 ? "#D32F2F"
+                        : s.QuantityOnHand <= 5 ? "#F9A825" : "#2E7D32").ToArray();
+
+                    <MudChart ChartType="ChartType.Bar"
+                              InputData="@stockValues"
+                              InputLabels="@stockLabels"
+                              ChartOptions="@_barOptions"
+                              Width="100%"
+                              Height="250px" />
+
+                    <MudDivider Style="margin:16px 0;" />
+
+                    <MudDataGrid T="StockLevelDto" Items="@stockData" Hover="true" Dense="true"
+                                 SortMode="SortMode.Single" Elevation="0"
+                                 RowClassFunc="@((item, _) => item.QuantityOnHand == 0 ? "row-danger" : item.QuantityOnHand <= 5 ? "row-warning" : "row-ok")">
+                        <Columns>
+                            <PropertyColumn Property="x => x.ProductName" Title="Product" />
+                            <PropertyColumn Property="x => x.StoreName" Title="Store" />
+                            <PropertyColumn Property="x => x.QuantityOnHand" Title="Qty" />
+                        </Columns>
+                    </MudDataGrid>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Style="color:#757575;font-style:italic;">No inventory data.</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 }
 
 @code {
     private DashboardSummaryDto? summary;
     private string error = "";
+    private bool initialized;
+
+    private ChartOptions _chartOptions = new()
+    {
+        ChartPalette = new[] { "#FF6D00", "#1A1A2E", "#2E7D32", "#F9A825", "#D32F2F", "#757575" }
+    };
+
+    private ChartOptions _barOptions = new()
+    {
+        ChartPalette = new[] { "#FF6D00" }
+    };
 
     protected override async Task OnInitializedAsync()
     {
-        try { summary = await Api.GetDashboard(); }
-        catch { error = "Could not connect to the API. Make sure the API server is running."; }
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        try
+        {
+            summary = await Api.GetDashboard();
+            initialized = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Nav.NavigateTo("/login", forceLoad: true);
+        }
+        catch
+        {
+            error = "Could not connect to the API. Make sure the server is running.";
+            initialized = true;
+        }
     }
 }

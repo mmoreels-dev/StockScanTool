@@ -1,55 +1,119 @@
 @page "/login"
 @layout LoginLayout
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject ApiClient Api
+@inject AuthStateService AuthState
+@using StockScanTool.Shared.Components
 
-<div class="login-card">
-    <h2>StockScanTool Admin</h2>
-    <p>Sign in to continue</p>
+<LoginCard Subtitle="Admin Dashboard">
+    <IconContent>
+        <img src="media/logo.svg" alt="MM" width="36" height="36" />
+    </IconContent>
+    <ChildContent>
+        <EditForm Model="this" OnValidSubmit="HandleLogin">
 
-    <div id="login-error" class="error-banner" style="display:none"></div>
+            <MudTextField @bind-Value="username"
+                          Label="Username"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Person"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Normal"
+                          Required="true"
+                          autocomplete="username" />
 
-    <form id="login-form">
-        <div class="form-group">
-            <label>Username</label>
-            <input id="login-username" name="username" class="form-control" value="admin" />
-        </div>
-        <div class="form-group">
-            <label>Password</label>
-            <input id="login-password" name="password" type="password" class="form-control" value="admin" />
-        </div>
-        <button id="login-btn" class="btn btn-primary" type="submit">Sign In</button>
-    </form>
-</div>
+            <MudTextField @bind-Value="password"
+                          Label="Password"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Lock"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Normal"
+                          InputType="InputType.Password"
+                          Required="true"
+                          autocomplete="current-password" />
 
-<script>
-    document.getElementById('login-form').addEventListener('submit', async function (e) {
-        e.preventDefault();
-        var btn = document.getElementById('login-btn');
-        var errorEl = document.getElementById('login-error');
-        btn.disabled = true;
-        btn.textContent = 'Signing in...';
-        errorEl.style.display = 'none';
+            <ErrorAlert Message="@error" />
 
-        try {
-            var resp = await fetch('/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: document.getElementById('login-username').value,
-                    password: document.getElementById('login-password').value
-                })
-            });
-            var data = await resp.json();
-            if (data.success && data.token) {
-                window.location.href = '/?token=' + encodeURIComponent(data.token);
-            } else {
-                errorEl.textContent = data.error || 'Login failed.';
-                errorEl.style.display = 'block';
-            }
-        } catch (ex) {
-            errorEl.textContent = 'Could not connect to the API.';
-            errorEl.style.display = 'block';
+            <MudButton ButtonType="ButtonType.Submit"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       Size="Size.Large"
+                       Disabled="@isLoading"
+                       Style="margin-top:16px;border-radius:8px;font-weight:600;text-transform:none;">
+                @if (isLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="color:white;margin-right:8px;" />
+                    <span>Signing in...</span>
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Login" Style="margin-right:8px;" />
+                    <span>Sign In</span>
+                }
+            </MudButton>
+        </EditForm>
+    </ChildContent>
+</LoginCard>
+
+@code {
+    private string username = "";
+    private string password = "";
+    private string error = "";
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (AuthState.IsAuthenticated)
+        {
+            Nav.NavigateTo("/", forceLoad: true);
         }
-        btn.disabled = false;
-        btn.textContent = 'Sign In';
-    });
-</script>
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            error = "Please enter both username and password.";
+            return;
+        }
+
+        isLoading = true;
+        error = "";
+        StateHasChanged();
+
+        try
+        {
+            var result = await JS.InvokeAsync<LoginResult>("authLogin", username, password);
+
+            if (result is { Success: true })
+            {
+                var token = await JS.InvokeAsync<string?>("authGetToken");
+                if (!string.IsNullOrEmpty(token))
+                {
+                    Api.SetToken(token);
+                }
+                Snackbar.Add("Welcome back!", Severity.Success);
+                Nav.NavigateTo("/", forceLoad: true);
+            }
+            else
+            {
+                error = result?.Error ?? "Login failed.";
+            }
+        }
+        catch (Exception)
+        {
+            error = "Could not connect to the API. Make sure the server is running.";
+        }
+
+        isLoading = false;
+    }
+
+    private class LoginResult
+    {
+        public bool Success { get; set; }
+        public string? Error { get; set; }
+    }
+}

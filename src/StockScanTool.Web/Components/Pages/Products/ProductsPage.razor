@@ -1,173 +1,129 @@
 @page "/products"
-@rendermode InteractiveServer
-@using StockScanTool.Web.Services
 @inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject IJSRuntime JS
-@implements IDisposable
 
-<h3>Product Management</h3>
+<PageTitle>Products - StockScanTool</PageTitle>
 
-@if (showForm)
+<PageHeader Title="Products" ButtonText="Add Product" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewProduct" />
+
+@if (loading)
 {
-    <div class="form-card">
-        <h4>@(editingId is null ? "Add New Product" : "Edit Product")</h4>
-        <div class="form-grid">
-            <div class="form-group">
-                <label>SKU</label>
-                <input @bind="sku" placeholder="e.g. PROD-001" />
-            </div>
-            <div class="form-group">
-                <label>Name</label>
-                <input @bind="name" placeholder="Product name" />
-            </div>
-            <div class="form-group">
-                <label>Barcode</label>
-                <div style="display:flex;gap:8px;align-items:center;">
-                    <input @bind="barcode" placeholder="e.g. 5901234123457" style="flex:1;" />
-                    <button type="button" class="btn btn-sm btn-primary" @onclick="ScanBarcode" disabled="@scanning">
-                        @if (scanning) { <span>Scanning...</span> }
-                        else { <span>📷 Scan</span> }
-                    </button>
-                </div>
-                <div id="admin-barcode-reader" style="width:100%;max-width:400px;margin-top:8px;@(scanning ? "" : "display:none;")"></div>
-            </div>
-            <div class="form-group">
-                <label>Price</label>
-                <input type="number" step="0.01" @bind="price" />
-            </div>
-        </div>
-        <div class="form-group" style="max-width:600px; margin-bottom:16px;">
-            <label>Description</label>
-            <input @bind="description" placeholder="Product description" />
-        </div>
-        <div class="form-actions">
-            <button class="btn btn-primary" @onclick="Save"
-                    disabled="@(string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(barcode) || price <= 0)">Save</button>
-            <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
-        </div>
-        @if (!string.IsNullOrEmpty(error))
-        {
-            <p class="error">@error</p>
-        }
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
     </div>
 }
-
-@if (!showForm)
+else if (!string.IsNullOrEmpty(error))
 {
-    <button class="btn btn-primary" @onclick="NewProduct">+ Add Product</button>
-}
-
-@if (products is null)
-{
-    <p>Loading...</p>
+    <ErrorAlert Message="@error" />
 }
 else
 {
-    <table class="data-table">
-        <thead>
-            <tr><th>ID</th><th>SKU</th><th>Name</th><th>Barcode</th><th>Price</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var p in products)
-            {
-                <tr>
-                    <td>@p.Id</td>
-                    <td>@p.Sku</td>
-                    <td>@p.Name</td>
-                    <td><code>@p.Barcode</code></td>
-                    <td>@p.Price.ToString("C")</td>
-                    <td>
-                        <button class="btn btn-sm" @onclick="() => Edit(p)">Edit</button>
-                        <button class="btn btn-sm btn-danger" @onclick="() => Delete(p.Id)">Delete</button>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <MudDataGrid T="ProductDto" Items="@FilteredProducts" Hover="true" Dense="true"
+                 SortMode="SortMode.Single" Elevation="2" Style="border-radius:12px;overflow:hidden;"
+                 Filterable="true" Groupable="false">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchText" Placeholder="Search by name, SKU, or barcode..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium" Class="mt-0" Immediate="true"
+                          DebounceInterval="300" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:400px;" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.Sku" Title="SKU" />
+            <PropertyColumn Property="x => x.Name" Title="Name" />
+            <PropertyColumn Property="x => x.Barcode" Title="Barcode">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.QrCode">
+                        @context.Item.Barcode
+                    </MudChip>
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.Price" Title="Price" Format="C" />
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => Edit(context.Item)" Title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => Delete(context.Item)" Title="Delete" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <MudText Style="padding:16px;color:#757575;">No products found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="ProductDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudDataGrid>
 }
 
 @code {
     private List<ProductDto>? products;
-    private bool showForm;
-    private int? editingId;
     private string error = "";
-    private bool scanning;
+    private bool loading = true;
+    private string searchText = "";
 
-    private string sku = "", name = "", barcode = "", description = "";
-    private decimal price;
-
-    private DotNetObjectReference<ProductsPage>? _dotNetRef;
-    private bool _needsScan;
+    private IEnumerable<ProductDto> FilteredProducts => products?.Where(p =>
+        string.IsNullOrEmpty(searchText) ||
+        p.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        p.Sku.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        p.Barcode.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+    ) ?? [];
 
     protected override async Task OnInitializedAsync()
     {
-        try { products = await Api.GetProducts(); }
-        catch { error = "Could not connect to the API. Make sure the API server is running."; }
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        await LoadData();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task LoadData()
     {
-        if (_needsScan)
-        {
-            _needsScan = false;
-            _dotNetRef ??= DotNetObjectReference.Create(this);
-            try { await JS.InvokeVoidAsync("adminScanner.scanOnce", _dotNetRef); }
-            catch (Exception ex) { error = $"Camera error: {ex.Message}"; scanning = false; await InvokeAsync(StateHasChanged); }
-        }
-    }
-
-    private void NewProduct()
-    {
-        editingId = null; sku = name = barcode = description = ""; price = 0;
-        showForm = true; error = "";
-    }
-
-    private void Edit(ProductDto p)
-    {
-        editingId = p.Id; sku = p.Sku; name = p.Name; barcode = p.Barcode; description = p.Description; price = p.Price;
-        showForm = true; error = "";
-    }
-
-    private void Cancel() { showForm = false; error = ""; }
-
-    private async Task Save()
-    {
+        loading = true;
         try
         {
-            var req = new CreateProductRequest(sku, name, description, barcode, price);
-            if (editingId is null)
-                await Api.CreateProduct(req);
-            else
-                await Api.UpdateProduct(editingId.Value, new UpdateProductRequest(sku, name, description, barcode, price));
-            showForm = false;
-            products = await Api.GetProducts();
+            products = (await Api.GetProducts()).ToList();
+            error = "";
         }
-        catch (Exception ex) { error = ex.Message; }
+        catch (UnauthorizedAccessException) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        catch { error = "Could not connect to the API."; }
+        loading = false;
     }
 
-    private async Task Delete(int id)
+    private void NewProduct() => ShowDialog(null);
+    private void Edit(ProductDto product) => ShowDialog(product);
+
+    private async Task ShowDialog(ProductDto? product)
     {
-        try { await Api.DeleteProduct(id); products = await Api.GetProducts(); }
-        catch (Exception ex) { error = ex.Message; }
+        var parameters = new DialogParameters<ProductDialog>
+        {
+            { x => x.Product, product },
+            { x => x.OnSave, EventCallback.Factory.Create(this, LoadData) }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<ProductDialog>(product == null ? "Add Product" : "Edit Product", parameters, options);
     }
 
-    private void ScanBarcode()
+    private async Task Delete(ProductDto product)
     {
-        scanning = true;
-        _needsScan = true;
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Product",
+            $"Are you sure you want to delete \"{product.Name}\"?",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            try
+            {
+                await Api.DeleteProduct(product.Id);
+                Snackbar.Add("Product deleted.", Severity.Success);
+                await LoadData();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        }
     }
 
-    [JSInvokable]
-    public async Task OnBarcodeScanned(string value)
-    {
-        barcode = value;
-        scanning = false;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    public void Dispose()
-    {
-        _dotNetRef?.Dispose();
-        _ = JS.InvokeVoidAsync("adminScanner.stop");
-    }
 }

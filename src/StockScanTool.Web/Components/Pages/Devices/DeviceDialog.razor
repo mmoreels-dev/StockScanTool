@@ -1,0 +1,112 @@
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight:600;">
+            <MudIcon Icon="@Icons.Material.Filled.DeviceHub" Style="margin-right:8px;" />
+            @(IsEdit ? "Edit Device" : "Add Device")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="deviceName" Label="Device Name" Variant="Variant.Outlined"
+                      Required="true" Margin="Margin.Normal" Placeholder="e.g. Scanner-01" />
+        <MudSelect T="int" @bind-Value="storeId" Label="Store" Variant="Variant.Outlined"
+                   Required="true" Margin="Margin.Normal">
+            <MudSelectItem Value="0">-- Select Store --</MudSelectItem>
+            @foreach (var s in Stores)
+            {
+                <MudSelectItem Value="@s.Id">@s.Name</MudSelectItem>
+            }
+        </MudSelect>
+        @if (IsEdit)
+        {
+            <MudSwitch @bind-Value="isActive" Label="Active" Color="Color.Primary" Margin="Margin.Normal" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Outlined" Style="text-transform:none;">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="@saving"
+                   Style="text-transform:none;">
+            @if (saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="margin-right:8px;" /> }
+            @(IsEdit ? "Update" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public DeviceDto? Device { get; set; }
+    [Parameter] public List<StoreDto> Stores { get; set; } = new();
+    [Parameter] public EventCallback OnSave { get; set; }
+
+    private bool IsEdit => Device is not null;
+    private string deviceName = "";
+    private int storeId;
+    private bool isActive = true;
+    private bool saving;
+
+    protected override void OnInitialized()
+    {
+        if (Device is not null)
+        {
+            deviceName = Device.DeviceName;
+            storeId = Device.StoreId;
+            isActive = Device.IsActive;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(deviceName) || storeId == 0) return;
+
+        saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                await Api.UpdateDevice(Device!.Id, new UpdateDeviceRequest(deviceName, storeId, isActive));
+                Snackbar.Add("Device updated.", Severity.Success);
+                await OnSave.InvokeAsync();
+                MudDialog.Close();
+            }
+            else
+            {
+                var device = await Api.CreateDevice(new CreateDeviceRequest(deviceName, storeId));
+                await OnSave.InvokeAsync();
+                if (!string.IsNullOrEmpty(device?.ApiKey))
+                {
+                    MudDialog.Close();
+                    await Task.Yield();
+                    await DialogService.ShowMessageBox(
+                        "Device API Key",
+                        (MarkupString)$"""
+                        <div style="margin-bottom:12px;">
+                            <strong style="color:#D32F2F;">Copy this key now — it will not be shown again.</strong>
+                        </div>
+                        <div style="background:#1A1A2E;color:#FF6D00;padding:12px;border-radius:8px;
+                                    font-family:monospace;font-size:14px;word-break:break-all;
+                                    user-select:all;text-align:center;">
+                            {device.ApiKey}
+                        </div>
+                        """,
+                        yesText: "Copied!");
+                }
+                else
+                {
+                    Snackbar.Add("Device created, but no API key was returned.", Severity.Warning);
+                    MudDialog.Close();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        saving = false;
+    }
+}

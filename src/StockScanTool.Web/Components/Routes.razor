@@ -1,6 +1,18 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
+@using Microsoft.AspNetCore.Components.Routing
+
+<Router AppAssembly="typeof(App).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
+    <NotFound>
+        <PageTitle>Not Found</PageTitle>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <MudText Typo="Typo.h4" Style="font-weight:700;margin-bottom:16px;">Page Not Found</MudText>
+            <MudText Typo="Typo.body1" Style="color:#757575;">The page you are looking for does not exist.</MudText>
+            <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" Style="margin-top:16px;text-transform:none;">
+                Go to Dashboard
+            </MudButton>
+        </LayoutView>
+    </NotFound>
 </Router>

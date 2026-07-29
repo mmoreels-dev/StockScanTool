@@ -1,0 +1,85 @@
+@namespace StockScanTool.ScannerPwa.Components.Pages
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight:600;">
+            <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Style="margin-right:8px;color:#FF6D00;" />
+            Shopping Cart
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        @if (Cart.Count == 0)
+        {
+            <MudText Typo="Typo.body1" Style="color:#999;text-align:center;padding:20px;">Cart is empty.</MudText>
+        }
+        else
+        {
+            <MudTable Items="Cart" Dense="true" Hover="true">
+                <ColGroup>
+                    <col style="width:auto;" />
+                    <col style="width:100px;" />
+                    <col style="width:80px;" />
+                    <col style="width:40px;" />
+                </ColGroup>
+                <HeaderContent>
+                    <MudTh>Item</MudTh>
+                    <MudTh Style="text-align:center;">Qty</MudTh>
+                    <MudTh Style="text-align:right;">Price</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd Style="text-align:center;">
+                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small"
+                                       Variant="Variant.Outlined" Color="Color.Default"
+                                       OnClick="() => ChangeQty(context, -1)"
+                                       Style="border:1px solid #ddd;margin-right:4px;" />
+                        <span style="display:inline-block;min-width:24px;font-weight:600;">@context.Quantity</span>
+                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                                       Variant="Variant.Outlined" Color="Color.Default"
+                                       OnClick="() => ChangeQty(context, 1)"
+                                       Style="border:1px solid #ddd;margin-left:4px;" />
+                    </MudTd>
+                    <MudTd Style="text-align:right;font-weight:600;">@context.Total.ToString("C")</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="() => RemoveItem(context)" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <div Style="text-align:right;margin-top:16px;padding-top:12px;border-top:2px solid #eee;">
+                <MudText Typo="Typo.h6" Style="font-weight:700;color:#FF6D00;">
+                    Total: @Cart.Sum(c => c.Total).ToString("C")
+                </MudText>
+            </div>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="Close">Close</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="@(Cart.Count == 0)" OnClick="Checkout"
+                   Style="text-transform:none;">
+            Checkout
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public List<CartItem> Cart { get; set; } = new();
+
+    private void ChangeQty(CartItem item, int delta)
+    {
+        item.Quantity += delta;
+        if (item.Quantity <= 0) Cart.Remove(item);
+    }
+
+    private void RemoveItem(CartItem item) => Cart.Remove(item);
+
+    private void Checkout() => MudDialog.Close(DialogResult.Ok(true));
+    private void Close() => MudDialog.Close(DialogResult.Cancel());
+}

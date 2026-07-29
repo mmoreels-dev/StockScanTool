@@ -1,0 +1,92 @@
+/* StockScanTool — MudBlazor Theme Overrides */
+
+:root {
+    --sst-primary: #FF6D00;
+    --sst-primary-dark: #E65100;
+    --sst-secondary: #1A1A2E;
+    --sst-surface: #FFFFFF;
+    --sst-background: #F5F5F5;
+    --sst-success: #2E7D32;
+    --sst-error: #D32F2F;
+    --sst-warning: #F9A825;
+    --sst-text: #212121;
+    --sst-text-secondary: #757575;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--sst-background);
+    color: var(--sst-text);
+}
+
+#app {
+    height: 100vh;
+}
+
+/* Blazor validation */
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--sst-success);
+}
+
+.invalid {
+    outline: 1px solid var(--sst-error);
+}
+
+.validation-message {
+    color: var(--sst-error);
+}
+
+.blazor-error-boundary {
+    background: var(--sst-error);
+    padding: 1rem;
+    color: white;
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred.";
+}
+
+/* MudBlazor overrides */
+.mud-appbar {
+    border-bottom: 2px solid var(--sst-primary) !important;
+}
+
+.mud-nav-menu .mud-nav-item .mud-nav-link {
+    border-left: 3px solid transparent;
+    transition: all 0.15s ease;
+}
+
+.mud-nav-menu .mud-nav-item .mud-nav-link.active {
+    background: rgba(255, 109, 0, 0.08);
+    color: var(--sst-primary) !important;
+    border-left-color: var(--sst-primary);
+}
+
+.mud-data-grid .mud-table-head {
+    background: var(--sst-secondary);
+}
+
+.mud-data-grid .mud-table-head th {
+    color: white !important;
+    font-weight: 600;
+}
+
+.mud-dialog .mud-dialog-title {
+    background: var(--sst-secondary);
+    color: white;
+}
+
+/* Stock level row colors */
+.row-danger td {
+    background: #FFEBEE !important;
+}
+
+.row-warning td {
+    background: #FFF8E1 !important;
+}
+
+.row-ok td {
+    background: #E8F5E9 !important;
+}

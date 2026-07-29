@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using StockScanTool.Api.Services;
+using StockScanTool.Infrastructure.Services;
 
 namespace StockScanTool.Tests.Unit.Services;
 

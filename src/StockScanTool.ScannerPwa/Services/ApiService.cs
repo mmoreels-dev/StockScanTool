@@ -14,6 +14,8 @@ public class ApiService
         _auth = new DeviceAuthService(http);
         _lookup = new ProductLookupService(http);
         _sale = new SaleSubmissionService(http);
+        _lookup.SessionExpired = () => _auth.Logout();
+        _sale.SessionExpired = () => _auth.Logout();
     }
 
     public int DeviceId => _auth.DeviceId;
@@ -22,7 +24,12 @@ public class ApiService
     public string DeviceName => _auth.DeviceName;
     public bool IsAuthenticated => _auth.IsAuthenticated;
 
-    public void SetBaseUrl(string url) => _auth.SetBaseUrl(url);
+    public void SetBaseUrl(string url)
+    {
+        _auth.SetBaseUrl(url);
+        _lookup.SetBaseUrl(url);
+        _sale.SetBaseUrl(url);
+    }
 
     public Task<bool> LoginAsync(string apiKey) => _auth.LoginAsync(apiKey);
 

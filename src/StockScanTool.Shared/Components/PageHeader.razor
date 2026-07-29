@@ -1,0 +1,21 @@
+@namespace StockScanTool.Shared.Components
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <MudText Typo="Typo.h4" Style="font-weight:700;">@Title</MudText>
+    @if (!string.IsNullOrEmpty(ButtonText))
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@ButtonIcon"
+                   OnClick="OnAdd"
+                   Style="text-transform:none;border-radius:8px;">
+            @ButtonText
+        </MudButton>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? ButtonText { get; set; }
+    [Parameter] public string? ButtonIcon { get; set; }
+    [Parameter] public EventCallback OnAdd { get; set; }
+}

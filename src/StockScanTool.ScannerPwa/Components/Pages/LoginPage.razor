@@ -2,36 +2,55 @@
 @inject ApiService Api
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject ILogger<LoginPage> Logger
 
-<div class="login-page">
-    <div class="login-card">
-        <div class="login-brand">
-            <div class="brand-icon">SS</div>
-            <h1>StockScanTool</h1>
-            <p>Barcode Scanner</p>
-        </div>
+<LoginCard Subtitle="Barcode Scanner">
+    <IconContent>
+        <img src="media/logo.svg" alt="MM" width="36" height="36" />
+    </IconContent>
+    <ChildContent>
+        <MudTextField @bind-Value="serverUrl"
+                      Label="Server Address"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Dns"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Normal"
+                      Required="true"
+                      placeholder="http://192.168.1.100:5168" />
 
-        <div class="form-group">
-            <label>Server Address</label>
-            <input @bind="serverUrl" placeholder="http://192.168.1.100:5168" />
-        </div>
+        <MudTextField @bind-Value="apiKey"
+                      Label="Device API Key"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.VpnKey"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Normal"
+                      InputType="InputType.Password"
+                      Required="true"
+                      placeholder="Enter your device API key" />
 
-        <div class="form-group">
-            <label>Device API Key</label>
-            <input @bind="apiKey" type="password" placeholder="Enter your device API key" />
-        </div>
+        <ErrorAlert Message="@error" />
 
-        @if (!string.IsNullOrEmpty(error))
-        {
-            <div class="error-msg">@error</div>
-        }
-
-        <button class="btn btn-primary btn-block" @onclick="Login" disabled="@loading">
-            @if (loading) { <span class="spinner"></span> }
-            else { <span>Connect</span> }
-        </button>
-    </div>
-</div>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   FullWidth="true"
+                   Size="Size.Large"
+                   Disabled="@loading"
+                   OnClick="Login"
+                   Style="margin-top:16px;border-radius:8px;font-weight:600;text-transform:none;">
+            @if (loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="color:white;margin-right:8px;" />
+                <span>Connecting...</span>
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Cable" Style="margin-right:8px;" />
+                <span>Connect</span>
+            }
+        </MudButton>
+    </ChildContent>
+</LoginCard>
 
 @code {
     private string serverUrl = "";
@@ -51,17 +70,44 @@
         error = "";
 
         Api.SetBaseUrl(serverUrl);
-        var success = await Api.LoginAsync(apiKey);
+        try
+        {
+            var success = await Api.LoginAsync(apiKey);
 
-        if (success)
-        {
-            Nav.NavigateTo("/scanner");
+            if (success)
+            {
+                Snackbar.Add("Connected to " + Api.StoreName, Severity.Success);
+                Nav.NavigateTo("/scanner");
+            }
+            else
+            {
+                Logger.LogWarning("Login returned false — the device was not found or the server returned an error.");
+                error = "Invalid API key, device inactive, or server error. Check the server and try again.";
+            }
         }
-        else
+        catch (UnauthorizedAccessException)
         {
+            Logger.LogWarning("Server returned 401 — invalid API key or inactive device");
             error = "Invalid API key or device inactive.";
         }
-
-        loading = false;
+        catch (HttpRequestException ex)
+        {
+            Logger.LogWarning(ex, "Network error connecting to {Url}", serverUrl);
+            error = "Could not reach server. Check the URL and ensure the server is running.";
+        }
+        catch (TaskCanceledException)
+        {
+            Logger.LogWarning("Connection timed out for {Url}", serverUrl);
+            error = "Connection timed out. Check the server URL.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error during login");
+            error = $"Connection failed: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
     }
 }

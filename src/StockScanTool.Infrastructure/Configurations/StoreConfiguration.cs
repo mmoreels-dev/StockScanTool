@@ -9,7 +9,7 @@ public class StoreConfiguration : IEntityTypeConfiguration<Store>
     public void Configure(EntityTypeBuilder<Store> builder)
     {
         builder.HasKey(s => s.Id);
-        builder.Property(s => s.Name).IsRequired().HasMaxLength(100);
-        builder.Property(s => s.Address).IsRequired().HasMaxLength(200);
+        builder.Property(s => s.Name).IsRequired().HasMaxLength(200);
+        builder.Property(s => s.Address).IsRequired().HasMaxLength(500);
     }
 }

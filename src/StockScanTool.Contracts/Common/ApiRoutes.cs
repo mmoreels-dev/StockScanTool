@@ -48,4 +48,21 @@ public static class ApiRoutes
         public const string DeviceLogin = $"{ApiRoutes.Base}/auth/device-login";
         public const string AdminLogin = $"{ApiRoutes.Base}/auth/admin-login";
     }
+
+    public static class Users
+    {
+        public const string Base = $"{ApiRoutes.Base}/users";
+        public const string GetById = $"{Base}/{{id:int}}";
+    }
+
+    public static class Roles
+    {
+        public const string Base = $"{ApiRoutes.Base}/roles";
+        public const string GetById = $"{Base}/{{id:int}}";
+    }
+
+    public static class Permissions
+    {
+        public const string Base = $"{ApiRoutes.Base}/permissions";
+    }
 }

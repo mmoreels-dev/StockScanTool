@@ -1,0 +1,139 @@
+@page "/users"
+@inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Users - StockScanTool</PageTitle>
+
+<PageHeader Title="Users" ButtonText="Add User" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewUser" />
+
+@if (loading)
+{
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <ErrorAlert Message="@error" />
+}
+else
+{
+    <MudDataGrid T="UserDto" Items="@FilteredUsers" Hover="true" Dense="true"
+                 SortMode="SortMode.Single" Elevation="2" Style="border-radius:12px;overflow:hidden;"
+                 Filterable="true" Groupable="false">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchText" Placeholder="Search users..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium" Class="mt-0" Immediate="true"
+                          DebounceInterval="300" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:300px;" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.Username" Title="Username" />
+            <PropertyColumn Property="x => x.DisplayName" Title="Display Name" />
+            <PropertyColumn Property="x => x.Roles" Title="Roles">
+                <CellTemplate>
+                    @foreach (var role in context.Item.Roles)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">@role</MudChip>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.IsActive" Title="Status">
+                <CellTemplate>
+                    @if (context.Item.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Active</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Inactive</MudChip>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => Edit(context.Item)" Title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => Delete(context.Item)" Title="Delete" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <MudText Style="padding:16px;color:#757575;">No users found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="UserDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    private List<UserDto>? users;
+    private string error = "";
+    private bool loading = true;
+    private string searchText = "";
+
+    private IEnumerable<UserDto> FilteredUsers => users?.Where(u =>
+        string.IsNullOrEmpty(searchText) ||
+        u.Username.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        u.DisplayName.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        u.Roles.Any(r => r.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+    ) ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        try
+        {
+            users = (await Api.GetUsers()).ToList();
+            error = "";
+        }
+        catch (UnauthorizedAccessException) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        catch { error = "Could not connect to the API."; }
+        loading = false;
+    }
+
+    private void NewUser() => ShowDialog(null);
+    private void Edit(UserDto user) => ShowDialog(user);
+
+    private async Task ShowDialog(UserDto? user)
+    {
+        var parameters = new DialogParameters<UserDialog>
+        {
+            { x => x.User, user },
+            { x => x.OnSave, EventCallback.Factory.Create(this, LoadData) }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<UserDialog>(user == null ? "Add User" : "Edit User", parameters, options);
+    }
+
+    private async Task Delete(UserDto user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete User",
+            $"Are you sure you want to delete \"{user.Username}\"?",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            try
+            {
+                await Api.DeleteUser(user.Id);
+                Snackbar.Add("User deleted.", Severity.Success);
+                await LoadData();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        }
+    }
+}

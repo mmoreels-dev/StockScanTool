@@ -1,10 +1,11 @@
 using Xunit;
 using Moq;
 using FluentAssertions;
-using StockScanTool.Api.Services;
+using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Contracts;
 using StockScanTool.Domain.Entities;
+using FluentValidation;
 
 namespace StockScanTool.Tests.Unit.Services;
 
@@ -12,13 +13,21 @@ public class StoreServiceTests
 {
     private readonly Mock<IStoreRepository> _repoMock;
     private readonly Mock<IUnitOfWork> _unitOfWorkMock;
+    private readonly Mock<IValidator<CreateStoreRequest>> _createValidatorMock;
+    private readonly Mock<IValidator<UpdateStoreRequest>> _updateValidatorMock;
     private readonly StoreService _sut;
 
     public StoreServiceTests()
     {
         _repoMock = new Mock<IStoreRepository>();
         _unitOfWorkMock = new Mock<IUnitOfWork>();
-        _sut = new StoreService(_repoMock.Object, _unitOfWorkMock.Object);
+        _createValidatorMock = new Mock<IValidator<CreateStoreRequest>>();
+        _updateValidatorMock = new Mock<IValidator<UpdateStoreRequest>>();
+        _createValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateStoreRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult());
+        _updateValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateStoreRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult());
+        _sut = new StoreService(_repoMock.Object, _unitOfWorkMock.Object, _createValidatorMock.Object, _updateValidatorMock.Object);
     }
 
     [Fact]

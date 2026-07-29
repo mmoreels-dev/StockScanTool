@@ -4,9 +4,9 @@ namespace StockScanTool.Application.Services;
 
 public interface IInventoryService
 {
-    Task<List<InventoryDto>> GetAllAsync();
-    Task<List<InventoryDto>> GetByStoreAsync(int storeId);
-    Task<InventoryDto?> GetByIdAsync(int id);
-    Task<InventoryDto> UpsertAsync(UpdateInventoryRequest request);
-    Task<bool> DecrementStockAsync(int productId, int storeId, int quantity);
+    Task<List<InventoryDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<List<InventoryDto>> GetByStoreAsync(int storeId, CancellationToken cancellationToken = default);
+    Task<InventoryDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<InventoryDto> UpsertAsync(UpdateInventoryRequest request, CancellationToken cancellationToken = default);
+    Task<bool> DecrementStockAsync(int productId, int storeId, int quantity, CancellationToken cancellationToken = default);
 }

@@ -1,10 +1,13 @@
 using Xunit;
 using Moq;
 using FluentAssertions;
-using StockScanTool.Api.Services;
+using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
+using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
 using StockScanTool.Domain.Entities;
+using FluentValidation;
+using Microsoft.Extensions.Logging;
 
 namespace StockScanTool.Tests.Unit.Services;
 
@@ -14,6 +17,8 @@ public class SaleServiceTests
     private readonly Mock<IProductRepository> _productRepoMock;
     private readonly Mock<IInventoryRepository> _inventoryRepoMock;
     private readonly Mock<IUnitOfWork> _unitOfWorkMock;
+    private readonly Mock<IValidator<SubmitSaleRequest>> _validatorMock;
+    private readonly Mock<ILogger<SaleService>> _loggerMock;
     private readonly SaleService _sut;
 
     public SaleServiceTests()
@@ -22,11 +27,17 @@ public class SaleServiceTests
         _productRepoMock = new Mock<IProductRepository>();
         _inventoryRepoMock = new Mock<IInventoryRepository>();
         _unitOfWorkMock = new Mock<IUnitOfWork>();
+        _validatorMock = new Mock<IValidator<SubmitSaleRequest>>();
+        _loggerMock = new Mock<ILogger<SaleService>>();
+        _validatorMock.Setup(v => v.ValidateAsync(It.IsAny<SubmitSaleRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult());
         _sut = new SaleService(
             _saleRepoMock.Object,
             _productRepoMock.Object,
             _inventoryRepoMock.Object,
-            _unitOfWorkMock.Object);
+            _unitOfWorkMock.Object,
+            _validatorMock.Object,
+            _loggerMock.Object);
     }
 
     [Fact]
@@ -107,10 +118,41 @@ public class SaleServiceTests
             })
             .ReturnsAsync((SaleTransaction t) => t);
 
+        _saleRepoMock.Setup(r => r.GetByIdWithIncludesAsync(1))
+            .ReturnsAsync((int id) => new SaleTransaction
+            {
+                Id = id,
+                StoreId = 1,
+                Store = inventory.Store,
+                ScanningDeviceId = 1,
+                ScanningDevice = new ScanningDevice { Id = 1, DeviceName = "Scanner 1" },
+                TotalAmount = 20m,
+                SaleDate = DateTime.UtcNow,
+                SaleItems =
+                [
+                    new SaleItem { Id = 1, ProductId = 1, Product = product, Quantity = 2, PriceAtTimeOfSale = product.Price }
+                ]
+            });
+
         var result = await _sut.SubmitSaleAsync(request);
 
         result.IsSuccess.Should().BeTrue();
         result.Data!.TotalAmount.Should().Be(20m);
         inventory.QuantityOnHand.Should().Be(8);
+    }
+
+    [Fact]
+    public async Task SubmitSaleAsync_ReturnsFailure_WhenValidationFails()
+    {
+        _validatorMock.Setup(v => v.ValidateAsync(It.IsAny<SubmitSaleRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FluentValidation.Results.ValidationResult([
+                new FluentValidation.Results.ValidationFailure("StoreId", "Store ID must be positive.")]));
+
+        var request = new SubmitSaleRequest(0, 1, [new(1, 1)]);
+
+        var result = await _sut.SubmitSaleAsync(request);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Contains("Store ID"));
     }
 }

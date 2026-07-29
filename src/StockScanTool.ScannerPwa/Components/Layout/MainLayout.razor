@@ -1,3 +1,10 @@
 @inherits LayoutComponentBase
+@using StockScanTool.Shared.Themes
 
-@Body
+<MudThemeProvider Theme="StockScanToolTheme.Default" />
+
+<MudLayout>
+    <MudMainContent Style="min-height:100dvh;display:flex;flex-direction:column;">
+        @Body
+    </MudMainContent>
+</MudLayout>

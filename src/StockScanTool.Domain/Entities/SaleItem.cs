@@ -1,8 +1,7 @@
 namespace StockScanTool.Domain.Entities;
 
-public class SaleItem
+public class SaleItem : AuditableEntity
 {
-    public int Id { get; set; }
     public int SaleTransactionId { get; set; }
     public int ProductId { get; set; }
     public int Quantity { get; set; }
