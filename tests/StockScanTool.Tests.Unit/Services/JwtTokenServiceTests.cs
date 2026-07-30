@@ -43,17 +43,22 @@ public class JwtTokenServiceTests
     }
 
     [Fact]
-    public void GenerateAdminToken_ReturnsValidToken()
+    public void GenerateRefreshToken_ReturnsNonEmptyString()
     {
-        var token = _sut.GenerateAdminToken();
+        var token = _sut.GenerateRefreshToken();
 
         token.Should().NotBeNullOrEmpty();
+        token.Should().NotContain("+");
+        token.Should().NotContain("/");
+    }
 
-        var handler = new JwtSecurityTokenHandler();
-        var jwt = handler.ReadJwtToken(token);
+    [Fact]
+    public void GenerateRefreshToken_ReturnsUniqueTokens()
+    {
+        var token1 = _sut.GenerateRefreshToken();
+        var token2 = _sut.GenerateRefreshToken();
 
-        jwt.Claims.Should().Contain(c => c.Type == ClaimTypes.NameIdentifier && c.Value == "admin");
-        jwt.Claims.Should().Contain(c => c.Type == ClaimTypes.Role && c.Value == "Admin");
+        token1.Should().NotBe(token2);
     }
 
     [Fact]
@@ -97,28 +102,20 @@ public class JwtTokenServiceTests
     }
 
     [Fact]
-    public void GenerateAdminToken_CanBeValidatedWithSameKey()
+    public void GenerateUserToken_ReturnsValidToken()
     {
-        var token = _sut.GenerateAdminToken();
+        var token = _sut.GenerateUserToken(1, "admin", "Admin User", ["Admin"], ["dashboard.read"]);
+
+        token.Should().NotBeNullOrEmpty();
 
         var handler = new JwtSecurityTokenHandler();
-        var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_settings.SecretKey));
-        var validationParams = new TokenValidationParameters
-        {
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = key,
-            ValidateIssuer = true,
-            ValidIssuer = _settings.Issuer,
-            ValidateAudience = true,
-            ValidAudience = _settings.Audience,
-            ValidateLifetime = true
-        };
+        var jwt = handler.ReadJwtToken(token);
 
-        var principal = handler.ValidateToken(token, validationParams, out _);
-
-        principal.Should().NotBeNull();
-        principal.FindFirst(ClaimTypes.NameIdentifier)!.Value.Should().Be("admin");
-        principal.FindFirst(ClaimTypes.Role)!.Value.Should().Be("Admin");
+        jwt.Claims.Should().Contain(c => c.Type == ClaimTypes.NameIdentifier && c.Value == "1");
+        jwt.Claims.Should().Contain(c => c.Type == ClaimTypes.Name && c.Value == "admin");
+        jwt.Claims.Should().Contain(c => c.Type == "displayName" && c.Value == "Admin User");
+        jwt.Claims.Should().Contain(c => c.Type == ClaimTypes.Role && c.Value == "Admin");
+        jwt.Claims.Should().Contain(c => c.Type == "permission" && c.Value == "dashboard.read");
     }
 
     [Fact]

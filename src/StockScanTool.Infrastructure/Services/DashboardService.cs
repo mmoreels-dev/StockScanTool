@@ -2,21 +2,22 @@ using Microsoft.EntityFrameworkCore;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
+using StockScanTool.Domain.Entities;
 
 namespace StockScanTool.Infrastructure.Services;
 
 public class DashboardService : IDashboardService
 {
-    private readonly IRepository<Domain.Entities.Store> _storeRepo;
-    private readonly IRepository<Domain.Entities.Product> _productRepo;
-    private readonly IRepository<Domain.Entities.ScanningDevice> _deviceRepo;
+    private readonly IRepository<Store> _storeRepo;
+    private readonly IRepository<Product> _productRepo;
+    private readonly IRepository<ScanningDevice> _deviceRepo;
     private readonly ISaleTransactionRepository _saleRepo;
     private readonly IInventoryRepository _inventoryRepo;
 
     public DashboardService(
-        IRepository<Domain.Entities.Store> storeRepo,
-        IRepository<Domain.Entities.Product> productRepo,
-        IRepository<Domain.Entities.ScanningDevice> deviceRepo,
+        IRepository<Store> storeRepo,
+        IRepository<Product> productRepo,
+        IRepository<ScanningDevice> deviceRepo,
         ISaleTransactionRepository saleRepo,
         IInventoryRepository inventoryRepo)
     {

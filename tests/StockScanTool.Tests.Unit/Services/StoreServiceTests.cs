@@ -1,6 +1,7 @@
 using Xunit;
 using Moq;
 using FluentAssertions;
+using MockQueryable;
 using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Contracts;
@@ -38,7 +39,7 @@ public class StoreServiceTests
             new() { Id = 1, Name = "Store A", Address = "123 Main St", IsActive = true },
             new() { Id = 2, Name = "Store B", Address = "456 Oak Ave", IsActive = false }
         };
-        _repoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(stores);
+        _repoMock.Setup(r => r.AsQueryable()).Returns(stores.BuildMock());
 
         var result = await _sut.GetAllAsync();
 

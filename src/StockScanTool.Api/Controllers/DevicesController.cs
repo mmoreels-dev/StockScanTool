@@ -18,6 +18,11 @@ public class DevicesController : BaseController
     public async Task<ActionResult<ApiResponse<List<DeviceDto>>>> GetAll()
         => Ok(ApiResponse<List<DeviceDto>>.Ok(await _service.GetAllAsync()));
 
+    [HttpGet("paged")]
+    [HasPermission("devices.read")]
+    public async Task<ActionResult<ApiResponse<PagedResult<DeviceDto>>>> GetPaged([FromQuery] PagedRequest request)
+        => Ok(ApiResponse<PagedResult<DeviceDto>>.Ok(await _service.GetPagedAsync(request)));
+
     [HttpGet("{id:int}")]
     [HasPermission("devices.read")]
     public async Task<ActionResult<ApiResponse<DeviceDto>>> GetById(int id)

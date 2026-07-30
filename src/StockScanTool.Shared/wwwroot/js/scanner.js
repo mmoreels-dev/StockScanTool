@@ -10,7 +10,7 @@
         return new Promise(function (resolve, reject) {
             if (window.Html5Qrcode) { resolve(); return; }
             var script = document.createElement('script');
-            script.src = 'lib/html5-qrcode.min.js';
+            script.src = '_content/StockScanTool.Shared/lib/html5-qrcode.min.js';
             script.onload = resolve;
             script.onerror = function () { reject(new Error('Failed to load html5-qrcode')); };
             document.head.appendChild(script);

@@ -11,7 +11,7 @@ namespace StockScanTool.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, bool useSqlite = true)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, bool useSqlite = true, string? apiKeyPepper = null)
     {
         services.AddDbContext<AppDbContext>(options =>
         {
@@ -40,6 +40,10 @@ public static class DependencyInjection
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IAuthService, AuthService>();
+
+        services.AddSingleton<IApiKeyHasher>(new ApiKeyHasher(
+            apiKeyPepper ?? throw new InvalidOperationException("ApiKeyPepper is required.")));
+        services.AddScoped<IPasswordHasher, PasswordHasher>();
 
         services.AddValidatorsFromAssemblyContaining<StockScanTool.Contracts.Validators.CreateProductRequestValidator>();
 

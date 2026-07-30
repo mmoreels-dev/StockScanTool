@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using StockScanTool.Application.Repositories;
@@ -12,8 +11,8 @@ public abstract class CrudService<TEntity, TDto, TCreateRequest, TUpdateRequest>
 {
     protected readonly IRepository<TEntity> _repo;
     protected readonly IUnitOfWork _unitOfWork;
-    private readonly IValidator<TCreateRequest>? _createValidator;
-    private readonly IValidator<TUpdateRequest>? _updateValidator;
+    protected readonly IValidator<TCreateRequest>? _createValidator;
+    protected readonly IValidator<TUpdateRequest>? _updateValidator;
 
     protected CrudService(
         IRepository<TEntity> repo,
@@ -27,29 +26,30 @@ public abstract class CrudService<TEntity, TDto, TCreateRequest, TUpdateRequest>
         _updateValidator = updateValidator;
     }
 
-    protected abstract Expression<Func<TEntity, bool>> IdPredicate(int id);
     protected abstract TDto ToDto(TEntity entity);
     protected abstract TEntity ToEntity(TCreateRequest request);
     protected abstract void UpdateEntity(TEntity entity, TUpdateRequest request);
 
+    protected virtual IQueryable<TEntity> ApplyIncludes(IQueryable<TEntity> query)
+    {
+        return query;
+    }
+
     public virtual async Task<List<TDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        var entities = await _repo.GetAllAsync();
+        var query = ApplyIncludes(_repo.AsQueryable());
+        var entities = await query.ToListAsync(cancellationToken);
         return entities.Select(ToDto).ToList();
     }
 
     public virtual async Task<PagedResult<TDto>> GetPagedAsync(PagedRequest request, CancellationToken cancellationToken = default)
     {
-        var query = _repo.AsQueryable();
+        var query = ApplyIncludes(_repo.AsQueryable());
         var totalCount = await query.CountAsync(cancellationToken);
 
-        query = request.SortBy?.ToLower() switch
-        {
-            "name" => request.Descending
-                ? query.OrderByDescending(e => GetSortValue(e, "name"))
-                : query.OrderBy(e => GetSortValue(e, "name")),
-            _ => query.OrderBy(e => GetSortValue(e, "id"))
-        };
+        query = request.Descending
+            ? query.OrderByDescending(e => EF.Property<object>(e, "Id"))
+            : query.OrderBy(e => EF.Property<object>(e, "Id"));
 
         var paged = await query
             .Skip((request.Page - 1) * request.PageSize)
@@ -105,17 +105,5 @@ public abstract class CrudService<TEntity, TDto, TCreateRequest, TUpdateRequest>
         _repo.Remove(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
-    }
-
-    private static object GetSortValue(TEntity entity, string field)
-    {
-        var prop = typeof(TEntity).GetProperty(field switch
-        {
-            "name" => typeof(TEntity).GetProperties().FirstOrDefault(p =>
-                p.Name.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
-                p.Name.Equals("DeviceName", StringComparison.OrdinalIgnoreCase))?.Name ?? "Id",
-            _ => "Id"
-        });
-        return prop?.GetValue(entity) ?? 0;
     }
 }

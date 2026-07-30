@@ -33,6 +33,11 @@ public class SalesController : BaseController
     public async Task<ActionResult<ApiResponse<List<SaleTransactionDto>>>> GetAll()
         => Ok(ApiResponse<List<SaleTransactionDto>>.Ok(await _saleService.GetAllAsync()));
 
+    [HttpGet("paged")]
+    [HasPermission("sales.read")]
+    public async Task<ActionResult<ApiResponse<PagedResult<SaleTransactionDto>>>> GetPaged([FromQuery] PagedRequest request)
+        => Ok(ApiResponse<PagedResult<SaleTransactionDto>>.Ok(await _saleService.GetPagedAsync(request)));
+
     [HttpGet("store/{storeId:int}")]
     [HasPermission("sales.read")]
     public async Task<ActionResult<ApiResponse<List<SaleTransactionDto>>>> GetByStore(

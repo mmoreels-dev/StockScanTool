@@ -7,60 +7,85 @@ using StockScanTool.Domain.Entities;
 
 namespace StockScanTool.Infrastructure.Services;
 
-public class UserService : IUserService
+public class UserService : CrudService<User, UserDto, CreateUserRequest, UpdateUserRequest>, IUserService
 {
-    private readonly IRepository<User> _userRepo;
     private readonly IRepository<Role> _roleRepo;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly IValidator<CreateUserRequest> _createValidator;
-    private readonly IValidator<UpdateUserRequest> _updateValidator;
+    private readonly IPasswordHasher _passwordHasher;
 
     public UserService(
         IRepository<User> userRepo,
         IRepository<Role> roleRepo,
         IUnitOfWork unitOfWork,
         IValidator<CreateUserRequest> createValidator,
-        IValidator<UpdateUserRequest> updateValidator)
+        IValidator<UpdateUserRequest> updateValidator,
+        IPasswordHasher passwordHasher)
+        : base(userRepo, unitOfWork, createValidator, updateValidator)
     {
-        _userRepo = userRepo;
         _roleRepo = roleRepo;
-        _unitOfWork = unitOfWork;
-        _createValidator = createValidator;
-        _updateValidator = updateValidator;
+        _passwordHasher = passwordHasher;
     }
 
-    public async Task<List<UserDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    protected override IQueryable<User> ApplyIncludes(IQueryable<User> query)
+        => query.Include(u => u.UserRoles).ThenInclude(ur => ur.Role);
+
+    protected override UserDto ToDto(User user) => new(
+        user.Id, user.Username, user.DisplayName, user.IsActive,
+        user.UserRoles.Select(ur => ur.Role.Name).ToList());
+
+    protected override User ToEntity(CreateUserRequest request)
+        => throw new NotSupportedException();
+
+    protected override void UpdateEntity(User entity, UpdateUserRequest request)
+        => throw new NotSupportedException();
+
+    public override async Task<PagedResult<UserDto>> GetPagedAsync(PagedRequest request, CancellationToken cancellationToken = default)
     {
-        var users = await _userRepo.AsQueryable()
-            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
-            .OrderBy(u => u.Username)
+        var query = ApplyIncludes(_repo.AsQueryable());
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        query = request.SortBy?.ToLower() switch
+        {
+            "username" => request.Descending
+                ? query.OrderByDescending(u => u.Username)
+                : query.OrderBy(u => u.Username),
+            "displayname" => request.Descending
+                ? query.OrderByDescending(u => u.DisplayName)
+                : query.OrderBy(u => u.DisplayName),
+            _ => query.OrderBy(u => u.Id)
+        };
+
+        var paged = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
             .ToListAsync(cancellationToken);
-        return users.Select(MapToDto).ToList();
-    }
 
-    public async Task<UserDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
-    {
-        var user = await _userRepo.AsQueryable()
-            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
-        return user is null ? null : MapToDto(user);
+        return new PagedResult<UserDto>(paged.Select(ToDto).ToList(), totalCount, request.Page, request.PageSize);
     }
 
     public async Task<UserDto?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)
     {
-        var user = await _userRepo.AsQueryable()
-            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+        var user = await ApplyIncludes(_repo.AsQueryable())
             .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
-        return user is null ? null : MapToDto(user);
+        return user is null ? null : ToDto(user);
     }
 
-    public async Task<UserDto> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
+    public override async Task<UserDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var validation = await _createValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            throw new ValidationException(validation.Errors);
+        var user = await ApplyIncludes(_repo.AsQueryable())
+            .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        return user is null ? null : ToDto(user);
+    }
 
-        if (await _userRepo.AsQueryable().AnyAsync(u => u.Username == request.Username, cancellationToken))
+    public override async Task<UserDto> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
+    {
+        if (_createValidator is not null)
+        {
+            var validation = await _createValidator.ValidateAsync(request, cancellationToken);
+            if (!validation.IsValid)
+                throw new ValidationException(validation.Errors);
+        }
+
+        if (await _repo.AsQueryable().AnyAsync(u => u.Username == request.Username, cancellationToken))
             throw new ValidationException($"A user with username '{request.Username}' already exists.");
 
         var roles = await _roleRepo.AsQueryable()
@@ -70,29 +95,31 @@ public class UserService : IUserService
         var user = new User
         {
             Username = request.Username,
-            PasswordHash = PasswordHasher.Hash(request.Password),
+            PasswordHash = _passwordHasher.Hash(request.Password),
             DisplayName = request.DisplayName,
             IsActive = true,
             UserRoles = roles.Select(r => new UserRole { Role = r }).ToList()
         };
 
-        await _userRepo.AddAsync(user);
+        await _repo.AddAsync(user);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return MapToDto(user);
+        return ToDto(user);
     }
 
-    public async Task<UserDto?> UpdateAsync(int id, UpdateUserRequest request, CancellationToken cancellationToken = default)
+    public override async Task<UserDto?> UpdateAsync(int id, UpdateUserRequest request, CancellationToken cancellationToken = default)
     {
-        var validation = await _updateValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            throw new ValidationException(validation.Errors);
+        if (_updateValidator is not null)
+        {
+            var validation = await _updateValidator.ValidateAsync(request, cancellationToken);
+            if (!validation.IsValid)
+                throw new ValidationException(validation.Errors);
+        }
 
-        var user = await _userRepo.AsQueryable()
-            .Include(u => u.UserRoles)
+        var user = await ApplyIncludes(_repo.AsQueryable())
             .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
         if (user is null) return null;
 
-        if (await _userRepo.AsQueryable().AnyAsync(u => u.Username == request.Username && u.Id != id, cancellationToken))
+        if (await _repo.AsQueryable().AnyAsync(u => u.Username == request.Username && u.Id != id, cancellationToken))
             throw new ValidationException($"A user with username '{request.Username}' already exists.");
 
         user.Username = request.Username;
@@ -107,20 +134,6 @@ public class UserService : IUserService
             user.UserRoles.Add(new UserRole { Role = role });
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return MapToDto(user);
+        return ToDto(user);
     }
-
-    public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
-    {
-        var user = await _userRepo.GetByIdAsync(id);
-        if (user is null) return false;
-
-        _userRepo.Remove(user);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return true;
-    }
-
-    private static UserDto MapToDto(User user) => new(
-        user.Id, user.Username, user.DisplayName, user.IsActive,
-        user.UserRoles.Select(ur => ur.Role.Name).ToList());
 }

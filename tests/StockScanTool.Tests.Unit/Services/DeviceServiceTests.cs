@@ -3,6 +3,7 @@ using Moq;
 using FluentAssertions;
 using StockScanTool.Infrastructure.Services;
 using StockScanTool.Application.Repositories;
+using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
 using StockScanTool.Domain.Entities;
 using FluentValidation;
@@ -17,9 +18,11 @@ public class DeviceServiceTests
     private readonly Mock<IValidator<CreateDeviceRequest>> _createValidatorMock;
     private readonly Mock<IValidator<UpdateDeviceRequest>> _updateValidatorMock;
     private readonly DeviceService _sut;
+    private readonly IApiKeyHasher _hasher;
 
     public DeviceServiceTests()
     {
+        _hasher = new ApiKeyHasher("test-pepper");
         _deviceRepoMock = new Mock<IScanningDeviceRepository>();
         _storeRepoMock = new Mock<IStoreRepository>();
         _unitOfWorkMock = new Mock<IUnitOfWork>();
@@ -29,7 +32,7 @@ public class DeviceServiceTests
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
         _updateValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateDeviceRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
-        _sut = new DeviceService(_deviceRepoMock.Object, _storeRepoMock.Object, _unitOfWorkMock.Object, _createValidatorMock.Object, _updateValidatorMock.Object);
+        _sut = new DeviceService(_deviceRepoMock.Object, _storeRepoMock.Object, _unitOfWorkMock.Object, _createValidatorMock.Object, _updateValidatorMock.Object, _hasher);
     }
 
     [Fact]

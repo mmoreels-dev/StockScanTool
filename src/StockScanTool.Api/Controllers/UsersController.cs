@@ -18,6 +18,11 @@ public class UsersController : BaseController
     public async Task<ActionResult<ApiResponse<List<UserDto>>>> GetAll()
         => Ok(ApiResponse<List<UserDto>>.Ok(await _service.GetAllAsync()));
 
+    [HttpGet("paged")]
+    [HasPermission("users.read")]
+    public async Task<ActionResult<ApiResponse<PagedResult<UserDto>>>> GetPaged([FromQuery] PagedRequest request)
+        => Ok(ApiResponse<PagedResult<UserDto>>.Ok(await _service.GetPagedAsync(request)));
+
     [HttpGet("{id:int}")]
     [HasPermission("users.read")]
     public async Task<ActionResult<ApiResponse<UserDto>>> GetById(int id)

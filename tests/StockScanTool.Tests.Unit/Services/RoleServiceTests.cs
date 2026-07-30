@@ -2,6 +2,7 @@ using Xunit;
 using Moq;
 using FluentAssertions;
 using FluentValidation;
+using MockQueryable;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
@@ -38,7 +39,7 @@ public class RoleServiceTests
             new() { Id = 1, Name = "Admin", Description = "Full access", IsActive = true, RolePermissions = [] },
             new() { Id = 2, Name = "Viewer", Description = "Read only", IsActive = true, RolePermissions = [] }
         };
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.AsAsyncQueryable());
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.BuildMock());
 
         var result = await _sut.GetAllAsync();
 
@@ -57,8 +58,8 @@ public class RoleServiceTests
             IsActive = true,
             RolePermissions = [new RolePermission { RoleId = 1, PermissionId = 1, Permission = permission }]
         };
-        var roles = new List<Role> { role }.AsQueryable();
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.AsAsyncQueryable());
+        var roles = new List<Role> { role };
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.BuildMock());
 
         var result = await _sut.GetByIdAsync(1);
 
@@ -70,7 +71,7 @@ public class RoleServiceTests
     [Fact]
     public async Task GetByIdAsync_ReturnsNull_WhenNotFound()
     {
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role>().AsAsyncQueryable());
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role>().BuildMock());
 
         var result = await _sut.GetByIdAsync(999);
 
@@ -81,9 +82,9 @@ public class RoleServiceTests
     public async Task CreateAsync_CreatesRole_WithValidRequest()
     {
         var permission = new Permission { Id = 1, Code = "dashboard.read", Name = "View Dashboard", GroupName = "Dashboard" };
-        var permissions = new List<Permission> { permission }.AsQueryable();
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role>().AsAsyncQueryable());
-        _permissionRepoMock.Setup(r => r.AsQueryable()).Returns(permissions.AsAsyncQueryable());
+        var permissions = new List<Permission> { permission };
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role>().BuildMock());
+        _permissionRepoMock.Setup(r => r.AsQueryable()).Returns(permissions.BuildMock());
         _createValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateRoleRequest>(), default))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
@@ -101,8 +102,8 @@ public class RoleServiceTests
         var roles = new List<Role>
         {
             new() { Id = 1, Name = "Admin", Description = "Full access", IsActive = true, RolePermissions = [] }
-        }.AsAsyncQueryable();
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.AsAsyncQueryable());
+        };
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role> { new() { Id = 1, Name = "Admin", Description = "Full access", IsActive = true, RolePermissions = [] } }.BuildMock());
         _createValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateRoleRequest>(), default))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
@@ -124,9 +125,9 @@ public class RoleServiceTests
             IsActive = true,
             RolePermissions = []
         };
-        var roles = new List<Role> { role }.AsAsyncQueryable();
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.AsAsyncQueryable());
-        _permissionRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Permission> { permission }.AsAsyncQueryable());
+        var roles = new List<Role> { role };
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.BuildMock());
+        _permissionRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Permission> { permission }.BuildMock());
         _updateValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateRoleRequest>(), default))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
@@ -144,7 +145,7 @@ public class RoleServiceTests
     [Fact]
     public async Task UpdateAsync_ReturnsNull_WhenNotFound()
     {
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role>().AsAsyncQueryable());
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role>().BuildMock());
         _updateValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateRoleRequest>(), default))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 

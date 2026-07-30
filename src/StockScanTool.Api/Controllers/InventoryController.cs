@@ -18,6 +18,11 @@ public class InventoryController : BaseController
     public async Task<ActionResult<ApiResponse<List<InventoryDto>>>> GetAll()
         => Ok(ApiResponse<List<InventoryDto>>.Ok(await _service.GetAllAsync()));
 
+    [HttpGet("paged")]
+    [HasPermission("inventory.read")]
+    public async Task<ActionResult<ApiResponse<PagedResult<InventoryDto>>>> GetPaged([FromQuery] PagedRequest request)
+        => Ok(ApiResponse<PagedResult<InventoryDto>>.Ok(await _service.GetPagedAsync(request)));
+
     [HttpGet("store/{storeId:int}")]
     [HasPermission("inventory.read")]
     public async Task<ActionResult<ApiResponse<List<InventoryDto>>>> GetByStore(int storeId)

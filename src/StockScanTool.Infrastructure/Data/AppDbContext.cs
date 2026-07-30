@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,5 +29,34 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Inventory>()
             .HasIndex(i => new { i.ProductId, i.StoreId })
             .IsUnique();
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        UpdateAuditableEntities();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override int SaveChanges()
+    {
+        UpdateAuditableEntities();
+        return base.SaveChanges();
+    }
+
+    private void UpdateAuditableEntities()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<AuditableEntity>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = null;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
     }
 }

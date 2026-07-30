@@ -39,4 +39,32 @@ public class AuthController : ControllerBase
 
         return Ok(ApiResponse<AdminLoginResponse>.Ok(result));
     }
+
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<RefreshTokenResponse>>> Refresh([FromBody] RefreshTokenRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            return BadRequest(ApiResponse<RefreshTokenResponse>.Fail("Refresh token is required."));
+
+        var result = await _authService.RefreshTokenAsync(request.RefreshToken);
+        if (result is null)
+            return Unauthorized(ApiResponse<RefreshTokenResponse>.Fail("Invalid or expired refresh token."));
+
+        return Ok(ApiResponse<RefreshTokenResponse>.Ok(result));
+    }
+
+    [HttpPost("revoke")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<string>>> Revoke([FromBody] RevokeRefreshTokenRequest request)
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var userId = userIdClaim is not null ? int.Parse(userIdClaim) : (int?)null;
+
+        var result = await _authService.RevokeRefreshTokenAsync(request.RefreshToken, userId);
+        if (!result)
+            return NotFound(ApiResponse<string>.Fail("No active refresh tokens found to revoke."));
+
+        return Ok(ApiResponse<string>.Ok("Refresh token(s) revoked successfully."));
+    }
 }

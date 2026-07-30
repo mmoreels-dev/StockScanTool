@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
-using Microsoft.AspNetCore.Mvc;
+using StockScanTool.Contracts;
 
 namespace StockScanTool.Api.Middleware;
 
@@ -9,6 +9,7 @@ public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
     {
@@ -31,29 +32,40 @@ public class ExceptionHandlingMiddleware
 
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        context.Response.ContentType = "application/problem+json";
-
-        var (statusCode, detail) = exception switch
+        var (statusCode, message, errors) = exception switch
         {
-            ValidationException validationEx => (HttpStatusCode.BadRequest, string.Join("; ", validationEx.Errors.Select(e => e.ErrorMessage))),
-            ArgumentException argEx => (HttpStatusCode.BadRequest, argEx.Message),
-            KeyNotFoundException keyEx => (HttpStatusCode.NotFound, keyEx.Message),
-            UnauthorizedAccessException => (HttpStatusCode.Unauthorized, "Unauthorized access."),
-            InvalidOperationException opEx => (HttpStatusCode.InternalServerError, opEx.Message),
-            _ => (HttpStatusCode.InternalServerError, "An unexpected error occurred.")
+            ValidationException validationEx => (
+                HttpStatusCode.BadRequest,
+                "Validation failed.",
+                validationEx.Errors.Select(e => e.ErrorMessage).ToList()
+            ),
+            ArgumentException argEx => (
+                HttpStatusCode.BadRequest,
+                argEx.Message,
+                (List<string>?)null
+            ),
+            KeyNotFoundException keyEx => (
+                HttpStatusCode.NotFound,
+                keyEx.Message,
+                (List<string>?)null
+            ),
+            UnauthorizedAccessException => (
+                HttpStatusCode.Unauthorized,
+                "Unauthorized access.",
+                (List<string>?)null
+            ),
+            _ => (
+                HttpStatusCode.InternalServerError,
+                "An unexpected error occurred.",
+                (List<string>?)null
+            )
         };
 
         context.Response.StatusCode = (int)statusCode;
+        context.Response.ContentType = "application/json";
 
-        var problem = new ProblemDetails
-        {
-            Status = (int)statusCode,
-            Title = statusCode.ToString(),
-            Detail = detail,
-            Type = $"https://httpstatuses.com/{(int)statusCode}"
-        };
-
-        var json = JsonSerializer.Serialize(problem, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        var response = new ApiResponse<object?>(false, null, message, errors);
+        var json = JsonSerializer.Serialize(response, JsonOptions);
         await context.Response.WriteAsync(json);
     }
 }

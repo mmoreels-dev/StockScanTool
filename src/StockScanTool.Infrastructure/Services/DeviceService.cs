@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using StockScanTool.Application.Repositories;
@@ -12,24 +11,24 @@ public class DeviceService : CrudService<ScanningDevice, DeviceDto, CreateDevice
 {
     private readonly IScanningDeviceRepository _deviceRepo;
     private readonly IStoreRepository _storeRepo;
+    private readonly IApiKeyHasher _apiKeyHasher;
 
     public DeviceService(
         IScanningDeviceRepository deviceRepo,
         IStoreRepository storeRepo,
         IUnitOfWork unitOfWork,
         IValidator<CreateDeviceRequest> createValidator,
-        IValidator<UpdateDeviceRequest> updateValidator)
+        IValidator<UpdateDeviceRequest> updateValidator,
+        IApiKeyHasher apiKeyHasher)
         : base(deviceRepo, unitOfWork, createValidator, updateValidator)
     {
         _deviceRepo = deviceRepo;
         _storeRepo = storeRepo;
+        _apiKeyHasher = apiKeyHasher;
     }
 
-    protected override Expression<Func<ScanningDevice, bool>> IdPredicate(int id)
-        => d => d.Id == id;
-
     protected override DeviceDto ToDto(ScanningDevice d)
-        => EntityMapper.ToDto(d, string.Empty);
+        => throw new NotSupportedException("DeviceDto requires a store name. Use EntityMapper.ToDto(d, storeName) instead.");
 
     protected override ScanningDevice ToEntity(CreateDeviceRequest r)
         => new()
@@ -50,7 +49,7 @@ public class DeviceService : CrudService<ScanningDevice, DeviceDto, CreateDevice
     {
         var rawKey = GenerateApiKey();
         var entity = ToEntity(request);
-        entity.ApiKey = ApiKeyHasher.Hash(rawKey);
+        entity.ApiKey = _apiKeyHasher.Hash(rawKey);
         await _deviceRepo.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -117,9 +116,11 @@ public class DeviceService : CrudService<ScanningDevice, DeviceDto, CreateDevice
         return stores.ToDictionary(s => s.Id, s => s.Name);
     }
 
+    private const int ApiKeyBytes = 32;
+
     private static string GenerateApiKey()
     {
-        var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(ApiKeyBytes);
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
     }
 }

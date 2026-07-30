@@ -7,13 +7,9 @@ using StockScanTool.Domain.Entities;
 
 namespace StockScanTool.Infrastructure.Services;
 
-public class RoleService : IRoleService
+public class RoleService : CrudService<Role, RoleDto, CreateRoleRequest, UpdateRoleRequest>, IRoleService
 {
-    private readonly IRepository<Role> _roleRepo;
     private readonly IRepository<Permission> _permissionRepo;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly IValidator<CreateRoleRequest> _createValidator;
-    private readonly IValidator<UpdateRoleRequest> _updateValidator;
 
     public RoleService(
         IRepository<Role> roleRepo,
@@ -21,38 +17,62 @@ public class RoleService : IRoleService
         IUnitOfWork unitOfWork,
         IValidator<CreateRoleRequest> createValidator,
         IValidator<UpdateRoleRequest> updateValidator)
+        : base(roleRepo, unitOfWork, createValidator, updateValidator)
     {
-        _roleRepo = roleRepo;
         _permissionRepo = permissionRepo;
-        _unitOfWork = unitOfWork;
-        _createValidator = createValidator;
-        _updateValidator = updateValidator;
     }
 
-    public async Task<List<RoleDto>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        var roles = await _roleRepo.AsQueryable()
-            .Include(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
-            .OrderBy(r => r.Name)
-            .ToListAsync(cancellationToken);
-        return roles.Select(MapToDto).ToList();
-    }
+    protected override IQueryable<Role> ApplyIncludes(IQueryable<Role> query)
+        => query.Include(r => r.RolePermissions).ThenInclude(rp => rp.Permission);
 
-    public async Task<RoleDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    protected override RoleDto ToDto(Role role) => new(
+        role.Id, role.Name, role.Description, role.IsActive,
+        role.RolePermissions.Select(rp => rp.Permission.Code).ToList());
+
+    protected override Role ToEntity(CreateRoleRequest request)
+        => throw new NotSupportedException();
+
+    protected override void UpdateEntity(Role entity, UpdateRoleRequest request)
+        => throw new NotSupportedException();
+
+    public override async Task<RoleDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var role = await _roleRepo.AsQueryable()
-            .Include(r => r.RolePermissions).ThenInclude(rp => rp.Permission)
+        var role = await ApplyIncludes(_repo.AsQueryable())
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
-        return role is null ? null : MapToDto(role);
+        return role is null ? null : ToDto(role);
     }
 
-    public async Task<RoleDto> CreateAsync(CreateRoleRequest request, CancellationToken cancellationToken = default)
+    public override async Task<PagedResult<RoleDto>> GetPagedAsync(PagedRequest request, CancellationToken cancellationToken = default)
     {
-        var validation = await _createValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            throw new ValidationException(validation.Errors);
+        var query = ApplyIncludes(_repo.AsQueryable());
+        var totalCount = await query.CountAsync(cancellationToken);
 
-        if (await _roleRepo.AsQueryable().AnyAsync(r => r.Name == request.Name, cancellationToken))
+        query = request.SortBy?.ToLower() switch
+        {
+            "name" => request.Descending
+                ? query.OrderByDescending(r => r.Name)
+                : query.OrderBy(r => r.Name),
+            _ => query.OrderBy(r => r.Id)
+        };
+
+        var paged = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<RoleDto>(paged.Select(ToDto).ToList(), totalCount, request.Page, request.PageSize);
+    }
+
+    public override async Task<RoleDto> CreateAsync(CreateRoleRequest request, CancellationToken cancellationToken = default)
+    {
+        if (_createValidator is not null)
+        {
+            var validation = await _createValidator.ValidateAsync(request, cancellationToken);
+            if (!validation.IsValid)
+                throw new ValidationException(validation.Errors);
+        }
+
+        if (await _repo.AsQueryable().AnyAsync(r => r.Name == request.Name, cancellationToken))
             throw new ValidationException($"A role with name '{request.Name}' already exists.");
 
         var permissions = await _permissionRepo.AsQueryable()
@@ -67,23 +87,25 @@ public class RoleService : IRoleService
             RolePermissions = permissions.Select(p => new RolePermission { Permission = p }).ToList()
         };
 
-        await _roleRepo.AddAsync(role);
+        await _repo.AddAsync(role);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return MapToDto(role);
+        return ToDto(role);
     }
 
-    public async Task<RoleDto?> UpdateAsync(int id, UpdateRoleRequest request, CancellationToken cancellationToken = default)
+    public override async Task<RoleDto?> UpdateAsync(int id, UpdateRoleRequest request, CancellationToken cancellationToken = default)
     {
-        var validation = await _updateValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            throw new ValidationException(validation.Errors);
+        if (_updateValidator is not null)
+        {
+            var validation = await _updateValidator.ValidateAsync(request, cancellationToken);
+            if (!validation.IsValid)
+                throw new ValidationException(validation.Errors);
+        }
 
-        var role = await _roleRepo.AsQueryable()
-            .Include(r => r.RolePermissions)
+        var role = await ApplyIncludes(_repo.AsQueryable())
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
         if (role is null) return null;
 
-        if (await _roleRepo.AsQueryable().AnyAsync(r => r.Name == request.Name && r.Id != id, cancellationToken))
+        if (await _repo.AsQueryable().AnyAsync(r => r.Name == request.Name && r.Id != id, cancellationToken))
             throw new ValidationException($"A role with name '{request.Name}' already exists.");
 
         role.Name = request.Name;
@@ -98,20 +120,6 @@ public class RoleService : IRoleService
             role.RolePermissions.Add(new RolePermission { Permission = permission });
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return MapToDto(role);
+        return ToDto(role);
     }
-
-    public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
-    {
-        var role = await _roleRepo.GetByIdAsync(id);
-        if (role is null) return false;
-
-        _roleRepo.Remove(role);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return true;
-    }
-
-    private static RoleDto MapToDto(Role role) => new(
-        role.Id, role.Name, role.Description, role.IsActive,
-        role.RolePermissions.Select(rp => rp.Permission.Code).ToList());
 }

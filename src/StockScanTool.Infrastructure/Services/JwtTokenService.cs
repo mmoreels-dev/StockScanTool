@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using StockScanTool.Application.Services;
 
@@ -13,6 +14,7 @@ public class JwtSettings
     public string Issuer { get; set; } = string.Empty;
     public string Audience { get; set; } = string.Empty;
     public int ExpirationInMinutes { get; set; } = 1440;
+    public int RefreshTokenExpirationDays { get; set; } = 7;
 }
 
 public class JwtTokenService : IJwtTokenService
@@ -21,6 +23,8 @@ public class JwtTokenService : IJwtTokenService
 
     public JwtTokenService(IOptions<JwtSettings> settings) => _settings = settings.Value;
 
+    public int ExpirationInMinutes => _settings.ExpirationInMinutes;
+
     public string GenerateDeviceToken(int deviceId, int storeId)
     {
         var claims = new[]
@@ -28,16 +32,6 @@ public class JwtTokenService : IJwtTokenService
             new Claim(ClaimTypes.NameIdentifier, deviceId.ToString()),
             new Claim(ClaimTypes.Role, "Device"),
             new Claim("storeId", storeId.ToString())
-        };
-        return GenerateToken(claims);
-    }
-
-    public string GenerateAdminToken()
-    {
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, "admin"),
-            new Claim(ClaimTypes.Role, "Admin")
         };
         return GenerateToken(claims);
     }
@@ -58,6 +52,12 @@ public class JwtTokenService : IJwtTokenService
             claims.Add(new Claim("permission", permission));
 
         return GenerateToken([.. claims]);
+    }
+
+    public string GenerateRefreshToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(64);
+        return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
     }
 
     private string GenerateToken(Claim[] claims)

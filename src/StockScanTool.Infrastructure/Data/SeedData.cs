@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using StockScanTool.Application.Services;
 using StockScanTool.Domain.Entities;
-using StockScanTool.Infrastructure.Services;
 
 namespace StockScanTool.Infrastructure.Data;
 
 public static class SeedData
 {
-    public static async Task InitializeAsync(AppDbContext context)
+    public static async Task InitializeAsync(AppDbContext context, IPasswordHasher passwordHasher, string adminPassword = "admin")
     {
         if (await context.Stores.AnyAsync())
             return;
@@ -99,9 +99,10 @@ public static class SeedData
         var adminUser = new User
         {
             Username = "admin",
-            PasswordHash = PasswordHasher.Hash("admin"),
+            PasswordHash = passwordHasher.Hash(adminPassword),
             DisplayName = "System Administrator",
             IsActive = true,
+            MustChangePassword = false,
             UserRoles = [new UserRole { RoleId = adminRole.Id }]
         };
 

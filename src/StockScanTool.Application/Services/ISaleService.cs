@@ -7,5 +7,6 @@ public interface ISaleService
 {
     Task<Result<SaleTransactionDto>> SubmitSaleAsync(SubmitSaleRequest request, CancellationToken cancellationToken = default);
     Task<List<SaleTransactionDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<SaleTransactionDto>> GetPagedAsync(PagedRequest request, CancellationToken cancellationToken = default);
     Task<List<SaleTransactionDto>> GetByStoreAsync(int storeId, DateTime? from, DateTime? to, CancellationToken cancellationToken = default);
 }

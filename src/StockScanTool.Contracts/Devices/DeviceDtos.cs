@@ -5,5 +5,4 @@ public record CreateDeviceRequest(string DeviceName, int StoreId);
 public record UpdateDeviceRequest(string DeviceName, int StoreId, bool IsActive);
 public record DeviceLoginRequest(string ApiKey);
 public record DeviceLoginResponse(int DeviceId, string DeviceName, int StoreId, string StoreName, string Token);
-public record AdminLoginRequest(string Username, string Password);
-public record AdminLoginResponse(string Token);
+

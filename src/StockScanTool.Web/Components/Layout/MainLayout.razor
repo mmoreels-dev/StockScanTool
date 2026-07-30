@@ -1,7 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @inject AuthStateService AuthState
 @inject NavigationManager Nav
-@inject IJSRuntime JS
 @using StockScanTool.Shared.Themes
 
 <MudThemeProvider Theme="StockScanToolTheme.Default" />
@@ -73,14 +72,7 @@
             return;
         }
 
-        try
-        {
-            var info = await JS.InvokeAsync<object>("authGetUserInfo");
-            var dict = info as System.Text.Json.JsonElement?;
-            if (dict.HasValue && dict.Value.TryGetProperty("displayName", out var name))
-                displayName = name.GetString() ?? "User";
-        }
-        catch { }
+        displayName = AuthState.DisplayName;
     }
 
     private async Task Logout()

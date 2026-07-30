@@ -1,6 +1,6 @@
-using System.Linq.Expressions;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.EntityFrameworkCore;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
@@ -22,10 +22,28 @@ public class ProductService : CrudService<Product, ProductDto, CreateProductRequ
         _productRepo = repo;
     }
 
-    protected override Expression<Func<Product, bool>> IdPredicate(int id)
-        => p => p.Id == id;
-
     protected override ProductDto ToDto(Product p) => EntityMapper.ToDto(p);
+
+    public override async Task<PagedResult<ProductDto>> GetPagedAsync(PagedRequest request, CancellationToken cancellationToken = default)
+    {
+        var query = _productRepo.AsQueryable();
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        query = request.SortBy?.ToLower() switch
+        {
+            "name" => request.Descending
+                ? query.OrderByDescending(p => p.Name)
+                : query.OrderBy(p => p.Name),
+            _ => query.OrderBy(p => p.Id)
+        };
+
+        var paged = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<ProductDto>(paged.Select(ToDto).ToList(), totalCount, request.Page, request.PageSize);
+    }
 
     protected override Product ToEntity(CreateProductRequest r)
         => new() { Sku = r.Sku, Name = r.Name, Description = r.Description, Barcode = r.Barcode, Price = r.Price };

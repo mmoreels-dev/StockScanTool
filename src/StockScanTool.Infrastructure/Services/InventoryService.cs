@@ -23,6 +23,37 @@ public class InventoryService : IInventoryService
         _validator = validator;
     }
 
+    public async Task<PagedResult<InventoryDto>> GetPagedAsync(PagedRequest request, CancellationToken cancellationToken = default)
+    {
+        IQueryable<Inventory> query = _inventoryRepo.AsQueryable()
+            .Include(i => i.Product)
+            .Include(i => i.Store);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        query = request.SortBy?.ToLower() switch
+        {
+            "product" => request.Descending
+                ? query.OrderByDescending(i => i.Product.Name)
+                : query.OrderBy(i => i.Product.Name),
+            "store" => request.Descending
+                ? query.OrderByDescending(i => i.Store.Name)
+                : query.OrderBy(i => i.Store.Name),
+            "quantity" => request.Descending
+                ? query.OrderByDescending(i => i.QuantityOnHand)
+                : query.OrderBy(i => i.QuantityOnHand),
+            _ => query.OrderBy(i => i.Store.Name).ThenBy(i => i.Product.Name)
+        };
+
+        var paged = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<InventoryDto>(
+            paged.Select(EntityMapper.ToDto).ToList(), totalCount, request.Page, request.PageSize);
+    }
+
     public async Task<List<InventoryDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var entities = await _inventoryRepo.GetAllAsync();

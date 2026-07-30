@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using Microsoft.JSInterop;
 using StockScanTool.Contracts;
 using StockScanTool.Shared.Services;
 
@@ -7,13 +6,11 @@ namespace StockScanTool.Web.Services;
 
 public class ApiClient : BaseApiService
 {
-    private readonly IJSRuntime _js;
     private readonly AuthStateService _auth;
     private bool _tokenAttached;
 
-    public ApiClient(HttpClient http, IJSRuntime js, AuthStateService auth) : base(http)
+    public ApiClient(HttpClient http, AuthStateService auth) : base(http)
     {
-        _js = js;
         _auth = auth;
         var baseUrl = http.BaseAddress?.ToString();
         if (!string.IsNullOrEmpty(baseUrl))

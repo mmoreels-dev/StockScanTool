@@ -2,6 +2,7 @@ using Xunit;
 using Moq;
 using FluentAssertions;
 using FluentValidation;
+using MockQueryable;
 using StockScanTool.Application.Repositories;
 using StockScanTool.Application.Services;
 using StockScanTool.Contracts;
@@ -17,6 +18,7 @@ public class UserServiceTests
     private readonly Mock<IUnitOfWork> _unitOfWorkMock;
     private readonly Mock<IValidator<CreateUserRequest>> _createValidatorMock;
     private readonly Mock<IValidator<UpdateUserRequest>> _updateValidatorMock;
+    private readonly IPasswordHasher _passwordHasher;
     private readonly UserService _sut;
 
     public UserServiceTests()
@@ -26,8 +28,9 @@ public class UserServiceTests
         _unitOfWorkMock = new Mock<IUnitOfWork>();
         _createValidatorMock = new Mock<IValidator<CreateUserRequest>>();
         _updateValidatorMock = new Mock<IValidator<UpdateUserRequest>>();
+        _passwordHasher = new PasswordHasher();
         _sut = new UserService(_userRepoMock.Object, _roleRepoMock.Object, _unitOfWorkMock.Object,
-            _createValidatorMock.Object, _updateValidatorMock.Object);
+            _createValidatorMock.Object, _updateValidatorMock.Object, _passwordHasher);
     }
 
     [Fact]
@@ -38,7 +41,7 @@ public class UserServiceTests
             new() { Id = 1, Username = "admin", DisplayName = "Admin", IsActive = true, UserRoles = [] },
             new() { Id = 2, Username = "manager", DisplayName = "Manager", IsActive = true, UserRoles = [] }
         };
-        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.AsAsyncQueryable());
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.BuildMock());
 
         var result = await _sut.GetAllAsync();
 
@@ -57,8 +60,8 @@ public class UserServiceTests
             IsActive = true,
             UserRoles = [new UserRole { UserId = 1, RoleId = 1, Role = role }]
         };
-        var users = new List<User> { user }.AsQueryable();
-        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.AsAsyncQueryable());
+        var users = new List<User> { user };
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.BuildMock());
 
         var result = await _sut.GetByIdAsync(1);
 
@@ -70,7 +73,7 @@ public class UserServiceTests
     [Fact]
     public async Task GetByIdAsync_ReturnsNull_WhenNotFound()
     {
-        _userRepoMock.Setup(r => r.AsQueryable()).Returns(new List<User>().AsAsyncQueryable());
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(new List<User>().BuildMock());
 
         var result = await _sut.GetByIdAsync(999);
 
@@ -81,9 +84,9 @@ public class UserServiceTests
     public async Task CreateAsync_CreatesUser_WithValidRequest()
     {
         var adminRole = new Role { Id = 1, Name = "Admin", IsActive = true };
-        var roles = new List<Role> { adminRole }.AsQueryable();
-        _userRepoMock.Setup(r => r.AsQueryable()).Returns(new List<User>().AsAsyncQueryable());
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.AsAsyncQueryable());
+        var roles = new List<Role> { adminRole };
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(new List<User>().BuildMock());
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(roles.BuildMock());
         _createValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateUserRequest>(), default))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
@@ -101,8 +104,8 @@ public class UserServiceTests
         var users = new List<User>
         {
             new() { Id = 1, Username = "existing", DisplayName = "Existing", IsActive = true, UserRoles = [] }
-        }.AsAsyncQueryable();
-        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.AsAsyncQueryable());
+        };
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(new List<User> { new() { Id = 1, Username = "existing", DisplayName = "Existing", IsActive = true, UserRoles = [] } }.BuildMock());
         _createValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<CreateUserRequest>(), default))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
@@ -124,9 +127,9 @@ public class UserServiceTests
             IsActive = true,
             UserRoles = [new UserRole { UserId = 1, RoleId = 1, Role = adminRole }]
         };
-        var users = new List<User> { user }.AsAsyncQueryable();
-        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.AsAsyncQueryable());
-        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role> { adminRole }.AsAsyncQueryable());
+        var users = new List<User> { user };
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(users.BuildMock());
+        _roleRepoMock.Setup(r => r.AsQueryable()).Returns(new List<Role> { adminRole }.BuildMock());
         _updateValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateUserRequest>(), default))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
@@ -143,7 +146,7 @@ public class UserServiceTests
     [Fact]
     public async Task UpdateAsync_ReturnsNull_WhenNotFound()
     {
-        _userRepoMock.Setup(r => r.AsQueryable()).Returns(new List<User>().AsAsyncQueryable());
+        _userRepoMock.Setup(r => r.AsQueryable()).Returns(new List<User>().BuildMock());
         _updateValidatorMock.Setup(v => v.ValidateAsync(It.IsAny<UpdateUserRequest>(), default))
             .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 

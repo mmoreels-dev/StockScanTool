@@ -115,6 +115,38 @@ public class SaleService : ISaleService
         return Result<SaleTransactionDto>.Ok(EntityMapper.ToDto(saved));
     }
 
+    public async Task<PagedResult<SaleTransactionDto>> GetPagedAsync(PagedRequest request, CancellationToken cancellationToken = default)
+    {
+        IQueryable<SaleTransaction> query = _saleRepo.AsQueryable()
+            .Include(s => s.Store)
+            .Include(s => s.ScanningDevice)
+            .Include(s => s.SaleItems).ThenInclude(i => i.Product);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        query = request.SortBy?.ToLower() switch
+        {
+            "date" => request.Descending
+                ? query.OrderByDescending(s => s.SaleDate)
+                : query.OrderBy(s => s.SaleDate),
+            "store" => request.Descending
+                ? query.OrderByDescending(s => s.Store.Name)
+                : query.OrderBy(s => s.Store.Name),
+            "amount" => request.Descending
+                ? query.OrderByDescending(s => s.TotalAmount)
+                : query.OrderBy(s => s.TotalAmount),
+            _ => query.OrderByDescending(s => s.SaleDate)
+        };
+
+        var paged = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<SaleTransactionDto>(
+            paged.Select(EntityMapper.ToDto).ToList(), totalCount, request.Page, request.PageSize);
+    }
+
     public async Task<List<SaleTransactionDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var transactions = await _saleRepo.GetAllAsync();

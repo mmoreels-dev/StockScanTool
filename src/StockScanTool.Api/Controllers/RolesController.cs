@@ -18,6 +18,11 @@ public class RolesController : BaseController
     public async Task<ActionResult<ApiResponse<List<RoleDto>>>> GetAll()
         => Ok(ApiResponse<List<RoleDto>>.Ok(await _service.GetAllAsync()));
 
+    [HttpGet("paged")]
+    [HasPermission("roles.read")]
+    public async Task<ActionResult<ApiResponse<PagedResult<RoleDto>>>> GetPaged([FromQuery] PagedRequest request)
+        => Ok(ApiResponse<PagedResult<RoleDto>>.Ok(await _service.GetPagedAsync(request)));
+
     [HttpGet("{id:int}")]
     [HasPermission("roles.read")]
     public async Task<ActionResult<ApiResponse<RoleDto>>> GetById(int id)

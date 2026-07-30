@@ -6,6 +6,7 @@ using StockScanTool.Application.Repositories;
 using StockScanTool.Contracts;
 using StockScanTool.Domain.Entities;
 using FluentValidation;
+using MockQueryable;
 
 namespace StockScanTool.Tests.Unit.Services;
 
@@ -38,7 +39,7 @@ public class ProductServiceTests
             new() { Id = 1, Sku = "W1", Name = "Widget", Description = "A widget", Barcode = "123456", Price = 9.99m },
             new() { Id = 2, Sku = "G1", Name = "Gadget", Description = "A gadget", Barcode = "789012", Price = 19.99m }
         };
-        _repoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(products);
+        _repoMock.Setup(r => r.AsQueryable()).Returns(products.BuildMock());
 
         var result = await _sut.GetAllAsync();
 
@@ -201,8 +202,7 @@ public class ProductServiceTests
         var products = Enumerable.Range(1, 25)
             .Select(i => new Product { Id = i, Sku = $"P{i}", Name = $"Product {i}", Description = $"Desc {i}", Barcode = $"{i:D6}", Price = i * 10m })
             .ToList();
-        _repoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(products);
-        _repoMock.Setup(r => r.AsQueryable()).Returns(products.AsAsyncQueryable());
+        _repoMock.Setup(r => r.AsQueryable()).Returns(products.BuildMock());
 
         var result = await _sut.GetPagedAsync(new PagedRequest(Page: 2, PageSize: 10));
 

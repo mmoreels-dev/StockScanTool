@@ -1,8 +1,8 @@
 @page "/login"
 @layout LoginLayout
-@inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject HttpClient Http
 @inject ApiClient Api
 @inject AuthStateService AuthState
 @using StockScanTool.Shared.Components
@@ -68,7 +68,7 @@
         await AuthState.InitializeAsync();
         if (AuthState.IsAuthenticated)
         {
-            Nav.NavigateTo("/", forceLoad: true);
+            Nav.NavigateTo("/");
         }
     }
 
@@ -86,21 +86,19 @@
 
         try
         {
-            var result = await JS.InvokeAsync<LoginResult>("authLogin", username, password);
+            var loginResponse = await Http.PostAsJsonAsync("api/v1/Auth/admin-login", new { username, password });
+            var content = await loginResponse.Content.ReadFromJsonAsync<LoginApiResponse>();
 
-            if (result is { Success: true })
+            if (content is { Success: true, Data.Token: { } token })
             {
-                var token = await JS.InvokeAsync<string?>("authGetToken");
-                if (!string.IsNullOrEmpty(token))
-                {
-                    Api.SetToken(token);
-                }
+                AuthState.SetToken(token);
+                Api.SetToken(token);
                 Snackbar.Add("Welcome back!", Severity.Success);
-                Nav.NavigateTo("/", forceLoad: true);
+                Nav.NavigateTo("/");
             }
             else
             {
-                error = result?.Error ?? "Login failed.";
+                error = content?.Error ?? "Login failed.";
             }
         }
         catch (Exception)
@@ -111,9 +109,5 @@
         isLoading = false;
     }
 
-    private class LoginResult
-    {
-        public bool Success { get; set; }
-        public string? Error { get; set; }
-    }
+    private record LoginApiResponse(bool Success, AdminLoginResponse? Data, string? Error);
 }
