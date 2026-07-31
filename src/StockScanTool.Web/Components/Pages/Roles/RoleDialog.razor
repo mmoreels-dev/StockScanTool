@@ -1,5 +1,7 @@
 @inject ApiClient Api
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@using StockScanTool.Web.Components.Pages.Permissions
 
 <MudDialog>
     <TitleContent>
@@ -14,6 +16,16 @@
         <MudTextField @bind-Value="description" Label="Description" Variant="Variant.Outlined"
                       Margin="Margin.Normal" Lines="2" />
         <MudText Typo="Typo.body2" Style="margin-top:8px;margin-bottom:4px;font-weight:600;">Permissions</MudText>
+        <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:4px;">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="NewPermission" Style="text-transform:none;">
+                New Permission
+            </MudButton>
+        </div>
+        @if (!string.IsNullOrEmpty(permissionError))
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Style="margin-bottom:4px;">@permissionError</MudAlert>
+        }
         <div style="max-height:240px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:8px;">
             @foreach (var group in groupedPermissions)
             {
@@ -53,19 +65,14 @@
     private bool saving;
     private List<PermissionDto> permissions = [];
     private Dictionary<int, bool> selectedPermissionIds = [];
+    private string permissionError = "";
 
     private IEnumerable<IGrouping<string, PermissionDto>> groupedPermissions
         => permissions.GroupBy(p => p.GroupName);
 
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            permissions = (await Api.GetPermissions()).ToList();
-            foreach (var p in permissions)
-                selectedPermissionIds[p.Id] = false;
-        }
-        catch { }
+        await LoadPermissionsAsync();
 
         if (Role is not null)
         {
@@ -78,6 +85,40 @@
                     selectedPermissionIds[p.Id] = true;
             }
         }
+    }
+
+    private async Task LoadPermissionsAsync()
+    {
+        try
+        {
+            var perms = (await Api.GetPermissions()).ToList();
+            var updated = new Dictionary<int, bool>();
+            foreach (var p in perms)
+                updated[p.Id] = selectedPermissionIds.GetValueOrDefault(p.Id);
+            permissions = perms;
+            selectedPermissionIds = updated;
+            permissionError = "";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            permissionError = "Session expired. Please log in again.";
+        }
+        catch
+        {
+            permissionError = "Could not load permissions from the API.";
+        }
+    }
+
+    private async Task NewPermission()
+    {
+        var parameters = new DialogParameters<PermissionDialog>
+        {
+            { x => x.Permission, null },
+            { x => x.OnSave, EventCallback.Factory.Create(this, LoadPermissionsAsync) }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<PermissionDialog>("Add Permission", parameters, options);
+        StateHasChanged();
     }
 
     private void Cancel() => MudDialog.Cancel();

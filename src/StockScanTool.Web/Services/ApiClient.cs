@@ -44,9 +44,46 @@ public class ApiClient : BaseApiService
         ClearToken();
     }
 
+    protected override async Task<bool> TryRefreshAsync()
+    {
+        var refreshToken = _auth.RefreshToken;
+        if (string.IsNullOrEmpty(refreshToken))
+            return false;
+
+        try
+        {
+            var response = await _http.PostAsJsonAsync(
+                FullUri("api/v1/auth/refresh"),
+                new RefreshTokenRequest(refreshToken),
+                JsonOpts);
+
+            if (!response.IsSuccessStatusCode)
+                return false;
+
+            var apiResp = await response.Content.ReadFromJsonAsync<ApiResponse<RefreshTokenResponse>>(JsonOpts);
+            if (apiResp is not { Success: true, Data.Token: { } newToken, Data.RefreshToken: { } newRefresh })
+                return false;
+
+            SetTokenPair(newToken, newRefresh);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public void SetToken(string token)
     {
         _auth.SetToken(token);
+        _token = token;
+        AttachToken();
+        _tokenAttached = true;
+    }
+
+    public void SetTokenPair(string token, string refreshToken)
+    {
+        _auth.SetTokenPair(token, refreshToken);
         _token = token;
         AttachToken();
         _tokenAttached = true;
@@ -102,6 +139,9 @@ public class ApiClient : BaseApiService
 
     public async Task<DeviceDto?> UpdateDevice(int id, UpdateDeviceRequest r)
         => await PutAsync<DeviceDto, UpdateDeviceRequest>($"{ApiRoutes.Devices.Base}/{id}", r);
+
+    public async Task<DeviceDto?> RegenerateDeviceKey(int id)
+        => await PostAsync<DeviceDto, object>($"{ApiRoutes.Devices.Base}/{id}/regenerate-key", new { });
 
     public async Task DeleteDevice(int id)
         => await DeleteAsync($"{ApiRoutes.Devices.Base}/{id}");
@@ -163,6 +203,18 @@ public class ApiClient : BaseApiService
     public async Task<List<PermissionDto>> GetPermissions()
         => await GetAsync<List<PermissionDto>>(ApiRoutes.Permissions.Base) ?? [];
 
+    public async Task<PermissionDto?> GetPermission(int id)
+        => await GetAsync<PermissionDto>($"{ApiRoutes.Permissions.Base}/{id}");
+
+    public async Task<PermissionDto> CreatePermission(CreatePermissionRequest r)
+        => (await PostAsync<PermissionDto, CreatePermissionRequest>(ApiRoutes.Permissions.Base, r))!;
+
+    public async Task<PermissionDto?> UpdatePermission(int id, UpdatePermissionRequest r)
+        => await PutAsync<PermissionDto, UpdatePermissionRequest>($"{ApiRoutes.Permissions.Base}/{id}", r);
+
+    public async Task DeletePermission(int id)
+        => await DeleteAsync($"{ApiRoutes.Permissions.Base}/{id}");
+
     // ── Multipart Upload ────────────────────────────────
     private async Task<T?> UploadAsync<T>(string url, Stream imageStream, string fileName) where T : class
     {
@@ -171,7 +223,7 @@ public class ApiClient : BaseApiService
             await EnsureAuthenticatedAsync();
             using var content = new MultipartFormDataContent();
             content.Add(new StreamContent(imageStream), "file", fileName);
-            var resp = await _http.PostAsync(FullUri(url), content);
+            var resp = await SendWithRefreshAsync(() => _http.PostAsync(FullUri(url), content));
             if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
                 await OnUnauthorizedAsync();

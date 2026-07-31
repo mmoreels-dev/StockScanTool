@@ -137,6 +137,26 @@ public class AuthApiTests : IClassFixture<ApiFixture>
     }
 
     [Fact]
+    public async Task AdminLogin_EmptyCredentials_ReturnsBadRequest()
+    {
+        var request = new { Username = "", Password = "" };
+        var response = await _fixture.Factory.CreateClient()
+            .PostAsJsonAsync("/api/v1/auth/admin-login", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task DeviceLogin_EmptyApiKey_ReturnsBadRequest()
+    {
+        var request = new { ApiKey = "" };
+        var response = await _fixture.Factory.CreateClient()
+            .PostAsJsonAsync("/api/v1/auth/device-login", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task RefreshToken_ValidToken_ReturnsNewTokens()
     {
         var loginRequest = new { Username = "admin", Password = "admin" };
@@ -324,6 +344,122 @@ public class ProductsApiTests : IClassFixture<ApiFixture>
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+
+    [Fact]
+    public async Task ProductLookup_Anonymous_ReturnsOk()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var adminClient = _fixture.Factory.CreateClient();
+        adminClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _fixture.AdminToken);
+        var createRequest = new { Sku = "LOOKUP-1", Name = "Lookup Product", Description = "Lookup test", Barcode = "123456789", Price = 19.99m };
+        var createResponse = await adminClient.PostAsJsonAsync("/api/v1/products", createRequest);
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var response = await _fixture.Factory.CreateClient()
+            .GetAsync("/api/v1/products/lookup/123456789?storeId=1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var content = await response.Content.ReadFromJsonAsync<ApiResponse<BarcodeLookupResponse>>();
+        content!.Success.Should().BeTrue();
+        content.Data!.Name.Should().Be("Lookup Product");
+        content.Data.Barcode.Should().Be("123456789");
+    }
+
+    [Fact]
+    public async Task ProductLookup_UnknownBarcode_ReturnsNotFound()
+    {
+        await _fixture.ResetDatabaseAsync();
+        var response = await _fixture.Factory.CreateClient()
+            .GetAsync("/api/v1/products/lookup/999999999?storeId=1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+}
+
+public class DevicesApiTests : IClassFixture<ApiFixture>
+{
+    private readonly ApiFixture _fixture;
+
+    public DevicesApiTests(ApiFixture fixture) => _fixture = fixture;
+
+    private HttpClient AuthorizedClient()
+    {
+        var client = _fixture.Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _fixture.AdminToken);
+        return client;
+    }
+
+    [Fact]
+    public async Task CreateDevice_ReturnsApiKey_AndLoginSucceeds()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/v1/devices", new { DeviceName = "scanner-test", StoreId = 1 });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await createResponse.Content.ReadFromJsonAsync<ApiResponse<DeviceDto>>();
+        created!.Data!.ApiKey.Should().NotBeNullOrEmpty();
+
+        var loginResponse = await _fixture.Factory.CreateClient()
+            .PostAsJsonAsync("/api/v1/auth/device-login", new { ApiKey = created.Data.ApiKey });
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var login = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<DeviceLoginResponse>>();
+        login!.Data!.DeviceName.Should().Be("scanner-test");
+    }
+
+    [Fact]
+    public async Task RegenerateKey_RotatesKey_OldKeyFails_NewKeyWorks()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/v1/devices", new { DeviceName = "scanner-rot", StoreId = 1 });
+        var created = await createResponse.Content.ReadFromJsonAsync<ApiResponse<DeviceDto>>();
+        var deviceId = created!.Data!.Id;
+        var oldKey = created.Data.ApiKey!;
+
+        var regenResponse = await client.PostAsync($"/api/v1/devices/{deviceId}/regenerate-key", null);
+        regenResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var regen = await regenResponse.Content.ReadFromJsonAsync<ApiResponse<DeviceDto>>();
+        var newKey = regen!.Data!.ApiKey!;
+        newKey.Should().NotBe(oldKey);
+
+        var oldLogin = await _fixture.Factory.CreateClient()
+            .PostAsJsonAsync("/api/v1/auth/device-login", new { ApiKey = oldKey });
+        oldLogin.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var newLogin = await _fixture.Factory.CreateClient()
+            .PostAsJsonAsync("/api/v1/auth/device-login", new { ApiKey = newKey });
+        newLogin.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task RegenerateKey_UnknownDevice_ReturnsNotFound()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var response = await client.PostAsync("/api/v1/devices/9999/regenerate-key", null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetDevices_DoesNotExposeApiKey()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+        await client.PostAsJsonAsync("/api/v1/devices", new { DeviceName = "scanner-secret", StoreId = 1 });
+
+        var response = await client.GetAsync("/api/v1/devices");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var content = await response.Content.ReadFromJsonAsync<ApiResponse<List<DeviceDto>>>();
+        content!.Data.Should().ContainSingle(d => d.DeviceName == "scanner-secret");
+        content.Data.First(d => d.DeviceName == "scanner-secret").ApiKey.Should().BeNullOrEmpty();
+    }
 }
 
 public class DashboardApiTests : IClassFixture<ApiFixture>
@@ -338,6 +474,202 @@ public class DashboardApiTests : IClassFixture<ApiFixture>
         var response = await _fixture.Factory.CreateClient().GetAsync("/api/v1/dashboard");
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+}
+
+public class RolesAndPermissionsApiTests : IClassFixture<ApiFixture>
+{
+    private readonly ApiFixture _fixture;
+
+    public RolesAndPermissionsApiTests(ApiFixture fixture) => _fixture = fixture;
+
+    private HttpClient AuthorizedClient()
+    {
+        var client = _fixture.Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _fixture.AdminToken);
+        return client;
+    }
+
+    [Fact]
+    public async Task CreatePermission_ReturnsCreated_AndAppearsInList()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/v1/permissions",
+            new { Code = "reports.view", Name = "View Reports", Description = "View reports", GroupName = "Reports" });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var listResponse = await client.GetAsync("/api/v1/permissions");
+        var content = await listResponse.Content.ReadFromJsonAsync<ApiResponse<List<PermissionDto>>>();
+        content!.Data.Should().Contain(p => p.Code == "reports.view");
+    }
+
+    [Fact]
+    public async Task CreatePermission_InvalidCode_ReturnsBadRequest()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/permissions",
+            new { Code = "Not Valid Code!", Name = "Bad", Description = "", GroupName = "Reports" });
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CreatePermission_DuplicateCode_ReturnsBadRequest()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var first = await client.PostAsJsonAsync("/api/v1/permissions",
+            new { Code = "reports.view", Name = "View Reports", Description = "", GroupName = "Reports" });
+        first.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var duplicate = await client.PostAsJsonAsync("/api/v1/permissions",
+            new { Code = "reports.view", Name = "View Reports Again", Description = "", GroupName = "Reports" });
+        duplicate.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UpdatePermission_ReturnsOk_WithNewValues()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/v1/permissions",
+            new { Code = "reports.view", Name = "View Reports", Description = "", GroupName = "Reports" });
+        var created = await createResponse.Content.ReadFromJsonAsync<ApiResponse<PermissionDto>>();
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/v1/permissions/{created!.Data!.Id}",
+            new { Code = "reports.view", Name = "View Financial Reports", Description = "Updated", GroupName = "Reports" });
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = await updateResponse.Content.ReadFromJsonAsync<ApiResponse<PermissionDto>>();
+        updated!.Data!.Name.Should().Be("View Financial Reports");
+    }
+
+    [Fact]
+    public async Task DeletePermission_AssignedToRole_ReturnsBadRequest()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var response = await client.DeleteAsync("/api/v1/permissions/1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task DeletePermission_Unassigned_ReturnsNoContent()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/v1/permissions",
+            new { Code = "reports.view", Name = "View Reports", Description = "", GroupName = "Reports" });
+        var created = await createResponse.Content.ReadFromJsonAsync<ApiResponse<PermissionDto>>();
+
+        var deleteResponse = await client.DeleteAsync($"/api/v1/permissions/{created!.Data!.Id}");
+
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task CreateRole_WithPermissions_ReturnsRoleWithPermissionCodes()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/v1/roles",
+            new { Name = "Auditor", Description = "Audit access", PermissionIds = new[] { 1, 2 } });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await createResponse.Content.ReadFromJsonAsync<ApiResponse<RoleDto>>();
+        created!.Data!.Permissions.Should().Contain("dashboard.read");
+
+        var getResponse = await client.GetAsync($"/api/v1/roles/{created.Data.Id}");
+        var role = await getResponse.Content.ReadFromJsonAsync<ApiResponse<RoleDto>>();
+        role!.Data!.Permissions.Should().HaveCount(2);
+    }
+}
+
+public class UsersApiTests : IClassFixture<ApiFixture>
+{
+    private readonly ApiFixture _fixture;
+
+    public UsersApiTests(ApiFixture fixture) => _fixture = fixture;
+
+    private HttpClient AuthorizedClient()
+    {
+        var client = _fixture.Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _fixture.AdminToken);
+        return client;
+    }
+
+    [Fact]
+    public async Task CreateUser_ValidRequest_ReturnsCreated()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/users",
+            new { Username = "jdoe", Password = "secret123", DisplayName = "Jane Doe", RoleIds = new[] { 1 } });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await response.Content.ReadFromJsonAsync<ApiResponse<UserDto>>();
+        created!.Data!.Username.Should().Be("jdoe");
+        created.Data.Roles.Should().Contain("Admin");
+    }
+
+    [Fact]
+    public async Task CreateUser_DuplicateUsername_ReturnsBadRequest_WithMessage()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var first = await client.PostAsJsonAsync("/api/v1/users",
+            new { Username = "jdoe", Password = "secret123", DisplayName = "Jane Doe", RoleIds = new[] { 1 } });
+        first.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var duplicate = await client.PostAsJsonAsync("/api/v1/users",
+            new { Username = "jdoe", Password = "secret123", DisplayName = "Jane Doe", RoleIds = new[] { 1 } });
+
+        duplicate.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await duplicate.Content.ReadFromJsonAsync<ApiResponse<object>>();
+        body!.Error.Should().Contain("already exists");
+    }
+
+    [Fact]
+    public async Task CreateUser_ShortPassword_ReturnsBadRequest_WithValidationMessage()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/users",
+            new { Username = "jdoe", Password = "abc", DisplayName = "Jane Doe", RoleIds = new[] { 1 } });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>();
+        body!.Errors.Should().Contain(e => e.Contains("Password must be at least 6 characters."));
+    }
+
+    [Fact]
+    public async Task UpdateUser_ValidRequest_ReturnsOk()
+    {
+        await _fixture.ResetDatabaseAsync();
+        using var client = AuthorizedClient();
+
+        var createResponse = await client.PostAsJsonAsync("/api/v1/users",
+            new { Username = "jdoe", Password = "secret123", DisplayName = "Jane Doe", RoleIds = new[] { 1 } });
+        var created = await createResponse.Content.ReadFromJsonAsync<ApiResponse<UserDto>>();
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/v1/users/{created!.Data!.Id}",
+            new { Username = "jdoe", DisplayName = "Jane Updated", IsActive = true, RoleIds = new[] { 3 } });
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = await updateResponse.Content.ReadFromJsonAsync<ApiResponse<UserDto>>();
+        updated!.Data!.DisplayName.Should().Be("Jane Updated");
+        updated.Data.Roles.Should().Contain("Viewer");
     }
 }
 
@@ -358,6 +690,13 @@ public class UnauthorizedAccessTests : IClassFixture<ApiFixture>
     public async Task GetProducts_WithoutToken_Returns401()
     {
         var response = await _fixture.Factory.CreateClient().GetAsync("/api/v1/products");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetPermissions_WithoutToken_Returns401()
+    {
+        var response = await _fixture.Factory.CreateClient().GetAsync("/api/v1/permissions");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

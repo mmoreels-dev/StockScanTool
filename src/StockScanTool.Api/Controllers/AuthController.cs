@@ -1,3 +1,4 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -11,27 +12,36 @@ namespace StockScanTool.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IValidator<AdminLoginRequest> _adminLoginValidator;
+    private readonly IValidator<DeviceLoginRequest> _deviceLoginValidator;
 
-    public AuthController(IAuthService authService)
+    public AuthController(
+        IAuthService authService,
+        IValidator<AdminLoginRequest> adminLoginValidator,
+        IValidator<DeviceLoginRequest> deviceLoginValidator)
     {
         _authService = authService;
+        _adminLoginValidator = adminLoginValidator;
+        _deviceLoginValidator = deviceLoginValidator;
     }
 
     [HttpPost("device-login")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     public async Task<ActionResult<ApiResponse<DeviceLoginResponse>>> DeviceLogin([FromBody] DeviceLoginRequest request)
-        => await _authService.LoginDeviceAsync(request) is { } response
+    {
+        await _deviceLoginValidator.ValidateAndThrowAsync(request);
+        return await _authService.LoginDeviceAsync(request) is { } response
             ? Ok(ApiResponse<DeviceLoginResponse>.Ok(response))
             : Unauthorized(ApiResponse<DeviceLoginResponse>.Fail("Invalid or inactive API key."));
+    }
 
     [HttpPost("admin-login")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     public async Task<ActionResult<ApiResponse<AdminLoginResponse>>> AdminLogin([FromBody] AdminLoginRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
-            return BadRequest(ApiResponse<AdminLoginResponse>.Fail("Username and password are required."));
+        await _adminLoginValidator.ValidateAndThrowAsync(request);
 
         var result = await _authService.LoginUserAsync(request.Username, request.Password);
         if (result is null)

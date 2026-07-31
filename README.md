@@ -55,6 +55,8 @@ dotnet run --project src/StockScanTool.Web
 
 **Login:** `admin` / `admin` at `https://localhost:5001` (seeded with Admin role — all permissions)
 
+> **Production note:** The API listens on plain HTTP `:5168` in development. In production, front it with TLS termination (HTTPS on `:5169` only activates when `certs/cert.pfx` is present).
+
 ## Projects
 
 | Project | Purpose |

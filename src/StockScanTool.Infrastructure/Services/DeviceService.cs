@@ -28,7 +28,7 @@ public class DeviceService : CrudService<ScanningDevice, DeviceDto, CreateDevice
     }
 
     protected override DeviceDto ToDto(ScanningDevice d)
-        => throw new NotSupportedException("DeviceDto requires a store name. Use EntityMapper.ToDto(d, storeName) instead.");
+        => EntityMapper.ToDto(d, d.Store?.Name ?? string.Empty);
 
     protected override ScanningDevice ToEntity(CreateDeviceRequest r)
         => new()
@@ -68,6 +68,19 @@ public class DeviceService : CrudService<ScanningDevice, DeviceDto, CreateDevice
 
         var storeName = (await _storeRepo.GetByIdAsync(request.StoreId))?.Name ?? string.Empty;
         return EntityMapper.ToDto(entity, storeName);
+    }
+
+    public async Task<DeviceDto?> RegenerateApiKeyAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _deviceRepo.GetByIdAsync(id);
+        if (entity is null) return null;
+
+        var rawKey = GenerateApiKey();
+        entity.ApiKey = _apiKeyHasher.Hash(rawKey);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var storeName = (await _storeRepo.GetByIdAsync(entity.StoreId))?.Name ?? string.Empty;
+        return EntityMapper.ToDto(entity, storeName) with { ApiKey = rawKey };
     }
 
     public override async Task<List<DeviceDto>> GetAllAsync(CancellationToken cancellationToken = default)

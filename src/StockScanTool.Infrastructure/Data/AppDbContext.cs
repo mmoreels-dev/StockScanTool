@@ -33,17 +33,17 @@ public class AppDbContext : DbContext
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        UpdateAuditableEntities();
+        UpdateTrackedEntities();
         return base.SaveChangesAsync(cancellationToken);
     }
 
     public override int SaveChanges()
     {
-        UpdateAuditableEntities();
+        UpdateTrackedEntities();
         return base.SaveChanges();
     }
 
-    private void UpdateAuditableEntities()
+    private void UpdateTrackedEntities()
     {
         var now = DateTime.UtcNow;
         foreach (var entry in ChangeTracker.Entries<AuditableEntity>())
@@ -57,6 +57,12 @@ public class AppDbContext : DbContext
             {
                 entry.Entity.UpdatedAt = now;
             }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Inventory>())
+        {
+            if (entry.State == EntityState.Modified)
+                entry.Entity.RowVersion++;
         }
     }
 }

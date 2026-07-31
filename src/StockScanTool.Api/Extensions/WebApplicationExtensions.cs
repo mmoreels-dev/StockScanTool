@@ -21,15 +21,9 @@ public static class WebApplicationExtensions
         }
         catch (Exception ex) when (ex is InvalidOperationException or SqliteException)
         {
-            if (app.Environment.IsDevelopment())
-            {
-                await context.Database.EnsureDeletedAsync();
-                await context.Database.EnsureCreatedAsync();
-            }
-            else
-            {
-                await context.Database.EnsureCreatedAsync();
-            }
+            app.Logger.LogWarning(ex,
+                "Database migration failed. Falling back to EnsureCreated without deleting existing data.");
+            await context.Database.EnsureCreatedAsync();
         }
         var adminPassword = app.Configuration["Admin:DefaultPassword"] ?? "admin";
         await SeedData.InitializeAsync(context, passwordHasher, adminPassword);

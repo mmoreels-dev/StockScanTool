@@ -86,13 +86,13 @@
 
         try
         {
-            var loginResponse = await Http.PostAsJsonAsync("api/v1/Auth/admin-login", new { username, password });
+            var loginResponse = await Http.PostAsJsonAsync(ApiRoutes.Auth.AdminLogin, new { username, password });
             var content = await loginResponse.Content.ReadFromJsonAsync<LoginApiResponse>();
 
             if (content is { Success: true, Data.Token: { } token })
             {
-                AuthState.SetToken(token);
-                Api.SetToken(token);
+                AuthState.SetTokenPair(token, content.Data.RefreshToken);
+                Api.SetTokenPair(token, content.Data.RefreshToken);
                 Snackbar.Add("Welcome back!", Severity.Success);
                 Nav.NavigateTo("/");
             }

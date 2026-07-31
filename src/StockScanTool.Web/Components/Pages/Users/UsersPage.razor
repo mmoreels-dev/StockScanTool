@@ -7,7 +7,7 @@
 
 <PageTitle>Users - StockScanTool</PageTitle>
 
-<PageHeader Title="Users" ButtonText="Add User" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewUser" />
+<PageHeader Title="Users" ButtonText="@(CanCreate ? "Add User" : null)" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewUser" />
 
 @if (loading)
 {
@@ -56,10 +56,16 @@ else
             </PropertyColumn>
             <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
                 <CellTemplate>
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
-                                   OnClick="() => Edit(context.Item)" Title="Edit" />
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                   OnClick="() => Delete(context.Item)" Title="Delete" />
+                    @if (CanUpdate)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="() => Edit(context.Item)" Title="Edit" />
+                    }
+                    @if (CanDelete)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="() => Delete(context.Item)" Title="Delete" />
+                    }
                 </CellTemplate>
             </TemplateColumn>
         </Columns>
@@ -77,6 +83,10 @@ else
     private string error = "";
     private bool loading = true;
     private string searchText = "";
+
+    private bool CanCreate => AuthState.Permissions.Contains("users.create");
+    private bool CanUpdate => AuthState.Permissions.Contains("users.update");
+    private bool CanDelete => AuthState.Permissions.Contains("users.delete");
 
     private IEnumerable<UserDto> FilteredUsers => users?.Where(u =>
         string.IsNullOrEmpty(searchText) ||

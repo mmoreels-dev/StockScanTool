@@ -45,6 +45,13 @@ public class DevicesController : BaseController
             ? Ok(ApiResponse<DeviceDto>.Ok(dto))
             : NotFound(ApiResponse<DeviceDto>.Fail($"Device with Id={id} not found."));
 
+    [HttpPost("{id:int}/regenerate-key")]
+    [HasPermission("devices.update")]
+    public async Task<ActionResult<ApiResponse<DeviceDto>>> RegenerateKey(int id)
+        => await _service.RegenerateApiKeyAsync(id) is { } dto
+            ? Ok(ApiResponse<DeviceDto>.Ok(dto))
+            : NotFound(ApiResponse<DeviceDto>.Fail($"Device with Id={id} not found."));
+
     [HttpDelete("{id:int}")]
     [HasPermission("devices.delete")]
     public async Task<IActionResult> Delete(int id)

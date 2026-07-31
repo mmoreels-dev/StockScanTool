@@ -1,3 +1,4 @@
+using Microsoft.JSInterop;
 using StockScanTool.Contracts;
 using StockScanTool.Shared.Services;
 
@@ -9,13 +10,13 @@ public class ApiService
     private readonly ProductLookupService _lookup;
     private readonly SaleSubmissionService _sale;
 
-    public ApiService(HttpClient http)
+    public ApiService(HttpClient http, IJSRuntime js)
     {
-        _auth = new DeviceAuthService(http);
+        _auth = new DeviceAuthService(http, js);
         _lookup = new ProductLookupService(http);
         _sale = new SaleSubmissionService(http);
-        _lookup.SessionExpired = () => _auth.Logout();
-        _sale.SessionExpired = () => _auth.Logout();
+        _lookup.SessionExpired = () => { _ = _auth.Logout(); };
+        _sale.SessionExpired = () => { _ = _auth.Logout(); };
     }
 
     public int DeviceId => _auth.DeviceId;
@@ -31,6 +32,14 @@ public class ApiService
         _sale.SetBaseUrl(url);
     }
 
+    public async Task InitializeAsync()
+    {
+        await _auth.InitializeAsync();
+        var baseUrl = _auth.GetBaseUrl();
+        if (!string.IsNullOrEmpty(baseUrl))
+            SetBaseUrl(baseUrl);
+    }
+
     public Task<bool> LoginAsync(string apiKey) => _auth.LoginAsync(apiKey);
 
     public Task<BarcodeLookupResponse?> LookupBarcodeAsync(string barcode)
@@ -39,5 +48,5 @@ public class ApiService
     public Task<SaleTransactionDto?> SubmitSaleAsync(List<CartItem> cart)
         => _sale.SubmitSaleAsync(_auth.StoreId, _auth.DeviceId, cart);
 
-    public void Logout() => _auth.Logout();
+    public Task Logout() => _auth.Logout();
 }

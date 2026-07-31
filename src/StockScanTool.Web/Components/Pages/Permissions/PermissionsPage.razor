@@ -1,0 +1,126 @@
+@page "/permissions"
+@inject ApiClient Api
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Permissions - StockScanTool</PageTitle>
+
+<PageHeader Title="Permissions" ButtonText="Add Permission" ButtonIcon="@Icons.Material.Filled.Add" OnAdd="NewPermission" />
+
+@if (loading)
+{
+    <div style="display:flex;justify-content:center;padding:48px;">
+        <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <ErrorAlert Message="@error" />
+}
+else
+{
+    <MudDataGrid T="PermissionDto" Items="@FilteredPermissions" Hover="true" Dense="true"
+                 SortMode="SortMode.Single" Elevation="2" Style="border-radius:12px;overflow:hidden;"
+                 Filterable="true" Groupable="true" GroupBy="@groupBy">
+        <ToolBarContent>
+            <MudTextField @bind-Value="searchText" Placeholder="Search permissions..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium" Class="mt-0" Immediate="true"
+                          DebounceInterval="300" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Style="max-width:300px;" />
+        </ToolBarContent>
+        <Columns>
+            <PropertyColumn Property="x => x.GroupName" Title="Group" />
+            <PropertyColumn Property="x => x.Code" Title="Code">
+                <CellTemplate>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Filled">@context.Item.Code</MudChip>
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.Name" Title="Name" />
+            <PropertyColumn Property="x => x.Description" Title="Description" />
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="() => Edit(context.Item)" Title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => Delete(context.Item)" Title="Delete" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <MudText Style="padding:16px;color:#757575;">No permissions found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudDataGridPager T="PermissionDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudDataGrid>
+}
+
+@code {
+    private List<PermissionDto>? permissions;
+    private string error = "";
+    private bool loading = true;
+    private string searchText = "";
+    private Func<PermissionDto, object> groupBy => x => x.GroupName;
+
+    private IEnumerable<PermissionDto> FilteredPermissions => permissions?.Where(p =>
+        string.IsNullOrEmpty(searchText) ||
+        p.Code.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        p.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+        p.GroupName.Contains(searchText, StringComparison.OrdinalIgnoreCase)
+    ) ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthState.InitializeAsync();
+        if (!AuthState.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        try
+        {
+            permissions = (await Api.GetPermissions()).ToList();
+            error = "";
+        }
+        catch (UnauthorizedAccessException) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        catch { error = "Could not connect to the API."; }
+        loading = false;
+    }
+
+    private void NewPermission() => ShowDialog(null);
+    private void Edit(PermissionDto permission) => ShowDialog(permission);
+
+    private async Task ShowDialog(PermissionDto? permission)
+    {
+        var parameters = new DialogParameters<PermissionDialog>
+        {
+            { x => x.Permission, permission },
+            { x => x.OnSave, EventCallback.Factory.Create(this, LoadData) }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<PermissionDialog>(permission == null ? "Add Permission" : "Edit Permission", parameters, options);
+    }
+
+    private async Task Delete(PermissionDto permission)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Permission",
+            $"Are you sure you want to delete \"{permission.Code}\"?",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed == true)
+        {
+            try
+            {
+                await Api.DeletePermission(permission.Id);
+                Snackbar.Add("Permission deleted.", Severity.Success);
+                await LoadData();
+            }
+            catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        }
+    }
+}

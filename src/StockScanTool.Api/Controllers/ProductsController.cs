@@ -37,12 +37,19 @@ public class ProductsController : BaseController
             ? Ok(ApiResponse<ProductDto>.Ok(dto))
             : NotFound(ApiResponse<ProductDto>.Fail($"Product with Id={id} not found."));
 
-    [HttpGet("barcode/{barcode}")]
-    [HasPermission("products.read")]
-    public async Task<ActionResult<ApiResponse<ProductDto>>> GetByBarcode(string barcode)
-        => await _service.GetByBarcodeAsync(barcode) is { } dto
-            ? Ok(ApiResponse<ProductDto>.Ok(dto))
-            : NotFound(ApiResponse<ProductDto>.Fail($"Product with barcode '{barcode}' not found."));
+    [HttpGet("lookup/{barcode}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<BarcodeLookupResponse>>> LookupBarcode(
+        string barcode, [FromQuery] int storeId)
+    {
+        var product = await _service.GetByBarcodeAsync(barcode);
+        if (product is null)
+            return NotFound(ApiResponse<BarcodeLookupResponse>.Fail($"Product with barcode '{barcode}' not found."));
+
+        var response = new BarcodeLookupResponse(
+            product.Id, product.Sku, product.Name, product.Description, product.Barcode, product.Price);
+        return Ok(ApiResponse<BarcodeLookupResponse>.Ok(response));
+    }
 
     [HttpGet("sku/{sku}")]
     [HasPermission("products.read")]

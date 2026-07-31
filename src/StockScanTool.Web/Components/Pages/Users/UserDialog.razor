@@ -19,18 +19,23 @@
                           Required="true" Margin="Margin.Normal" InputType="InputType.Password" />
         }
         <MudSelect T="string" @bind-Value="selectedRole" Label="Role" Variant="Variant.Outlined"
-                   Required="true" Margin="Margin.Normal">
+                   Required="true" Margin="Margin.Normal" Disabled="@(roles.Count == 0)">
             <MudSelectItem Value="string.Empty">-- Select Role --</MudSelectItem>
             @foreach (var role in roles)
             {
                 <MudSelectItem Value="@role.Name">@role.Name</MudSelectItem>
             }
         </MudSelect>
+        @if (!string.IsNullOrEmpty(roleError))
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Style="margin:8px 0 0;">@roleError</MudAlert>
+        }
         <MudSwitch @bind-Value="isActive" Label="Active" Color="Color.Success" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Variant="Variant.Outlined" Style="text-transform:none;">Cancel</MudButton>
-        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="@saving"
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="@(saving || roles.Count == 0)"
                    Style="text-transform:none;">
             @if (saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="margin-right:8px;" /> }
             @(IsEdit ? "Update" : "Create")
@@ -52,6 +57,7 @@
     private bool isActive = true;
     private bool saving;
     private List<RoleDto> roles = [];
+    private string roleError = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -59,7 +65,14 @@
         {
             roles = (await Api.GetRoles()).ToList();
         }
-        catch { }
+        catch (UnauthorizedAccessException)
+        {
+            roleError = "Session expired. Please log in again.";
+        }
+        catch (Exception ex)
+        {
+            roleError = $"Could not load roles: {ex.Message}";
+        }
 
         if (User is not null)
         {

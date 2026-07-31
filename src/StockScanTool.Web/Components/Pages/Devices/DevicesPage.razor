@@ -53,6 +53,8 @@ else
             </PropertyColumn>
             <TemplateColumn Title="Actions" Sortable="false" Filterable="false" Align="Align.End">
                 <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.VpnKey" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="() => RegenerateKey(context.Item)" Title="Regenerate API key" />
                     <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
                                    OnClick="() => Edit(context.Item)" Title="Edit" />
                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
@@ -134,5 +136,43 @@ else
             }
             catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
         }
+    }
+
+    private async Task RegenerateKey(DeviceDto device)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Regenerate API Key",
+            $"Generate a new API key for \"{device.DeviceName}\"? The current key will stop working immediately.",
+            yesText: "Regenerate", cancelText: "Cancel");
+        if (confirmed != true) return;
+
+        DeviceDto? result = null;
+        try
+        {
+            result = await Api.RegenerateDeviceKey(device.Id);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); return; }
+
+        if (result is null || string.IsNullOrEmpty(result.ApiKey))
+        {
+            Snackbar.Add("Could not regenerate API key.", Severity.Error);
+            return;
+        }
+
+        await DialogService.ShowMessageBox(
+            "New Device API Key",
+            (MarkupString)$"""
+            <div style="margin-bottom:12px;">
+                <strong style="color:#D32F2F;">Copy this key now — it will not be shown again.</strong>
+            </div>
+            <div style="background:#1A1A2E;color:#FF6D00;padding:12px;border-radius:8px;
+                        font-family:monospace;font-size:14px;word-break:break-all;
+                        user-select:all;text-align:center;">
+                {result.ApiKey}
+            </div>
+            """,
+            yesText: "Copied!");
+        Snackbar.Add("API key regenerated.", Severity.Success);
+        await LoadData();
     }
 }

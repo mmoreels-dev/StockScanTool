@@ -36,7 +36,7 @@ public class ExceptionHandlingMiddleware
         {
             ValidationException validationEx => (
                 HttpStatusCode.BadRequest,
-                "Validation failed.",
+                validationEx.Errors.Count() > 0 ? "Validation failed." : validationEx.Message,
                 validationEx.Errors.Select(e => e.ErrorMessage).ToList()
             ),
             ArgumentException argEx => (

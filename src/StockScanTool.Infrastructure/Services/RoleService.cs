@@ -29,11 +29,23 @@ public class RoleService : CrudService<Role, RoleDto, CreateRoleRequest, UpdateR
         role.Id, role.Name, role.Description, role.IsActive,
         role.RolePermissions.Select(rp => rp.Permission.Code).ToList());
 
-    protected override Role ToEntity(CreateRoleRequest request)
-        => throw new NotSupportedException();
+    protected override Role ToEntity(CreateRoleRequest request) => new()
+    {
+        Name = request.Name,
+        Description = request.Description,
+        IsActive = true,
+        RolePermissions = request.PermissionIds.Select(id => new RolePermission { PermissionId = id }).ToList()
+    };
 
     protected override void UpdateEntity(Role entity, UpdateRoleRequest request)
-        => throw new NotSupportedException();
+    {
+        entity.Name = request.Name;
+        entity.Description = request.Description;
+        entity.IsActive = request.IsActive;
+        entity.RolePermissions.Clear();
+        foreach (var id in request.PermissionIds)
+            entity.RolePermissions.Add(new RolePermission { PermissionId = id });
+    }
 
     public override async Task<RoleDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
@@ -75,21 +87,15 @@ public class RoleService : CrudService<Role, RoleDto, CreateRoleRequest, UpdateR
         if (await _repo.AsQueryable().AnyAsync(r => r.Name == request.Name, cancellationToken))
             throw new ValidationException($"A role with name '{request.Name}' already exists.");
 
+        var entity = ToEntity(request);
         var permissions = await _permissionRepo.AsQueryable()
             .Where(p => request.PermissionIds.Contains(p.Id))
             .ToListAsync(cancellationToken);
+        entity.RolePermissions = permissions.Select(p => new RolePermission { Permission = p }).ToList();
 
-        var role = new Role
-        {
-            Name = request.Name,
-            Description = request.Description,
-            IsActive = true,
-            RolePermissions = permissions.Select(p => new RolePermission { Permission = p }).ToList()
-        };
-
-        await _repo.AddAsync(role);
+        await _repo.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToDto(role);
+        return ToDto(entity);
     }
 
     public override async Task<RoleDto?> UpdateAsync(int id, UpdateRoleRequest request, CancellationToken cancellationToken = default)
@@ -108,14 +114,11 @@ public class RoleService : CrudService<Role, RoleDto, CreateRoleRequest, UpdateR
         if (await _repo.AsQueryable().AnyAsync(r => r.Name == request.Name && r.Id != id, cancellationToken))
             throw new ValidationException($"A role with name '{request.Name}' already exists.");
 
-        role.Name = request.Name;
-        role.Description = request.Description;
-        role.IsActive = request.IsActive;
-
-        role.RolePermissions.Clear();
+        UpdateEntity(role, request);
         var permissions = await _permissionRepo.AsQueryable()
             .Where(p => request.PermissionIds.Contains(p.Id))
             .ToListAsync(cancellationToken);
+        role.RolePermissions.Clear();
         foreach (var permission in permissions)
             role.RolePermissions.Add(new RolePermission { Permission = permission });
 

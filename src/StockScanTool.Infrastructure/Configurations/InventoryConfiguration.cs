@@ -11,7 +11,7 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
         builder.HasKey(i => i.Id);
 
         builder.Property(i => i.RowVersion)
-            .IsRowVersion();
+            .IsConcurrencyToken();
 
         builder.HasOne(i => i.Product)
             .WithMany(p => p.Inventories)

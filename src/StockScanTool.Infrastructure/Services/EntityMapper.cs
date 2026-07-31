@@ -12,7 +12,7 @@ public static class EntityMapper
         => new(p.Id, p.Sku, p.Name, p.Description, p.Barcode, p.Price, p.ImagePath);
 
     public static DeviceDto ToDto(ScanningDevice d, string storeName)
-        => new(d.Id, d.DeviceName, d.StoreId, storeName, d.ApiKey, d.IsActive, d.LastPing);
+        => new(d.Id, d.DeviceName, d.StoreId, storeName, string.Empty, d.IsActive, d.LastPing);
 
     public static InventoryDto ToDto(Inventory i)
         => new(i.Id, i.ProductId, i.Product.Name, i.Product.Barcode,

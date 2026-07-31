@@ -1,38 +1,95 @@
 using System.Text.Json;
+using Microsoft.JSInterop;
 
 namespace StockScanTool.Web.Services;
 
 public class AuthStateService
 {
+    private const string AccessTokenKey = "sst_access_token";
+    private const string RefreshTokenKey = "sst_refresh_token";
+
+    private readonly IJSRuntime _js;
+
     private string? _token;
+    private string? _refreshToken;
     private string? _displayName;
     private List<string> _roles = [];
     private List<string> _permissions = [];
 
+    public AuthStateService(IJSRuntime js) => _js = js;
+
     public bool IsAuthenticated => !string.IsNullOrEmpty(_token);
     public string? Token => _token;
+    public string? RefreshToken => _refreshToken;
     public string DisplayName => _displayName ?? "User";
     public IReadOnlyList<string> Roles => _roles.AsReadOnly();
     public IReadOnlyList<string> Permissions => _permissions.AsReadOnly();
 
-    public Task InitializeAsync()
+    public async Task InitializeAsync()
     {
-        return Task.CompletedTask;
+        _token = await GetStoredAsync(AccessTokenKey);
+        _refreshToken = await GetStoredAsync(RefreshTokenKey);
+        if (_token is not null)
+            DecodeToken(_token);
     }
 
-    public void SetToken(string token)
+    public void SetToken(string token) => SetTokenPair(token, _refreshToken);
+
+    public void SetTokenPair(string token, string? refreshToken)
     {
         _token = token;
+        _refreshToken = refreshToken;
         DecodeToken(token);
+        _ = PersistAsync();
     }
 
-    public Task LogoutAsync()
+    public async Task LogoutAsync()
     {
         _token = null;
+        _refreshToken = null;
         _displayName = null;
         _roles = [];
         _permissions = [];
-        return Task.CompletedTask;
+        await RemoveStoredAsync(AccessTokenKey);
+        await RemoveStoredAsync(RefreshTokenKey);
+    }
+
+    private async Task PersistAsync()
+    {
+        try
+        {
+            await _js.InvokeVoidAsync("setStorageItem", AccessTokenKey, _token);
+            await _js.InvokeVoidAsync("setStorageItem", RefreshTokenKey, _refreshToken);
+        }
+        catch
+        {
+            // JS interop unavailable — keep the session in-memory only.
+        }
+    }
+
+    private async Task<string?> GetStoredAsync(string key)
+    {
+        try
+        {
+            var value = await _js.InvokeAsync<string>("getStorageItem", key);
+            return string.IsNullOrEmpty(value) ? null : value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task RemoveStoredAsync(string key)
+    {
+        try
+        {
+            await _js.InvokeVoidAsync("removeStorageItem", key);
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     private void DecodeToken(string token)

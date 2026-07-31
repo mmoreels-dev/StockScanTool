@@ -57,4 +57,11 @@ launchSettings.json
 .DS_Store
 Thumbs.db
 
+## Secrets & artifacts
+certs/
+*.db
+*.db-shm
+*.db-wal
+session-ses_*.md
+
 .fake

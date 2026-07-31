@@ -22,7 +22,7 @@ else if (summary is not null)
 {
     <MudGrid Gutter="Gutter.Default">
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;border-left:4px solid #FF6D00;">
+            <MudLink Href="/stores" Typo="Typo.body1" Underline="Underline.Hover" Style="display:block;padding:20px;border-radius:12px;border-left:4px solid #FF6D00;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);color:inherit;text-decoration:none;">
                 <div style="display:flex;align-items:center;gap:12px;">
                     <MudIcon Icon="@Icons.Material.Filled.Store" Size="Size.Large" Style="color:#FF6D00;" />
                     <div>
@@ -30,10 +30,10 @@ else if (summary is not null)
                         <MudText Typo="Typo.body2" Style="color:#757575;">Stores</MudText>
                     </div>
                 </div>
-            </MudPaper>
+            </MudLink>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;border-left:4px solid #FF6D00;">
+            <MudLink Href="/products" Typo="Typo.body1" Underline="Underline.Hover" Style="display:block;padding:20px;border-radius:12px;border-left:4px solid #FF6D00;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);color:inherit;text-decoration:none;">
                 <div style="display:flex;align-items:center;gap:12px;">
                     <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Large" Style="color:#FF6D00;" />
                     <div>
@@ -41,10 +41,10 @@ else if (summary is not null)
                         <MudText Typo="Typo.body2" Style="color:#757575;">Products</MudText>
                     </div>
                 </div>
-            </MudPaper>
+            </MudLink>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;border-left:4px solid #FF6D00;">
+            <MudLink Href="/devices" Typo="Typo.body1" Underline="Underline.Hover" Style="display:block;padding:20px;border-radius:12px;border-left:4px solid #FF6D00;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);color:inherit;text-decoration:none;">
                 <div style="display:flex;align-items:center;gap:12px;">
                     <MudIcon Icon="@Icons.Material.Filled.DeviceHub" Size="Size.Large" Style="color:#FF6D00;" />
                     <div>
@@ -52,10 +52,10 @@ else if (summary is not null)
                         <MudText Typo="Typo.body2" Style="color:#757575;">Devices</MudText>
                     </div>
                 </div>
-            </MudPaper>
+            </MudLink>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;border-left:4px solid #2E7D32;">
+            <MudLink Href="/sales" Typo="Typo.body1" Underline="Underline.Hover" Style="display:block;padding:20px;border-radius:12px;border-left:4px solid #2E7D32;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);color:inherit;text-decoration:none;">
                 <div style="display:flex;align-items:center;gap:12px;">
                     <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Size="Size.Large" Style="color:#2E7D32;" />
                     <div>
@@ -63,17 +63,17 @@ else if (summary is not null)
                         <MudText Typo="Typo.body2" Style="color:#757575;">Revenue</MudText>
                     </div>
                 </div>
-            </MudPaper>
+            </MudLink>
         </MudItem>
     </MudGrid>
 
     <MudGrid Gutter="Gutter.Default" Style="margin-top:24px;">
         <MudItem xs="12" md="6">
             <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;">
-                <MudText Typo="Typo.h6" Style="font-weight:600;margin-bottom:16px;">
+                <MudLink Href="/sales" Typo="Typo.h6" Underline="Underline.Hover" Style="font-weight:600;margin-bottom:16px;color:inherit;display:block;">
                     <MudIcon Icon="@Icons.Material.Filled.BarChart" Style="margin-right:8px;vertical-align:middle;" />
                     Sales by Store
-                </MudText>
+                </MudLink>
                 @if (summary.SalesByStore?.Any() == true)
                 {
                     var chartData = summary.SalesByStore.OrderByDescending(x => x.TotalRevenue).ToList();
@@ -107,10 +107,10 @@ else if (summary is not null)
 
         <MudItem xs="12" md="6">
             <MudPaper Elevation="2" Style="padding:20px;border-radius:12px;">
-                <MudText Typo="Typo.h6" Style="font-weight:600;margin-bottom:16px;">
+                <MudLink Href="/inventory" Typo="Typo.h6" Underline="Underline.Hover" Style="font-weight:600;margin-bottom:16px;color:inherit;display:block;">
                     <MudIcon Icon="@Icons.Material.Filled.Inventory" Style="margin-right:8px;vertical-align:middle;" />
                     Stock Levels
-                </MudText>
+                </MudLink>
                 @if (summary.StockLevels?.Any() == true)
                 {
                     var stockData = summary.StockLevels.ToList();

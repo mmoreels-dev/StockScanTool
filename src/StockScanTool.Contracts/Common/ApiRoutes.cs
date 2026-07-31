@@ -14,7 +14,7 @@ public static class ApiRoutes
     {
         public const string Base = $"{ApiRoutes.Base}/products";
         public const string GetById = $"{Base}/{{id:int}}";
-        public const string ByBarcode = $"{Base}/barcode/{{barcode}}";
+        public const string LookupBarcode = $"{Base}/lookup/{{barcode}}";
         public const string BySku = $"{Base}/sku/{{sku}}";
     }
 
@@ -22,6 +22,7 @@ public static class ApiRoutes
     {
         public const string Base = $"{ApiRoutes.Base}/devices";
         public const string GetById = $"{Base}/{{id:int}}";
+        public const string RegenerateKey = $"{Base}/{{id:int}}/regenerate-key";
     }
 
     public static class Inventory
@@ -35,7 +36,6 @@ public static class ApiRoutes
     {
         public const string Base = $"{ApiRoutes.Base}/sales";
         public const string ByStore = $"{Base}/store/{{storeId:int}}";
-        public const string LookupBarcode = $"{Base}/lookup/{{barcode}}";
     }
 
     public static class Dashboard
@@ -64,5 +64,6 @@ public static class ApiRoutes
     public static class Permissions
     {
         public const string Base = $"{ApiRoutes.Base}/permissions";
+        public const string GetById = $"{Base}/{{id:int}}";
     }
 }

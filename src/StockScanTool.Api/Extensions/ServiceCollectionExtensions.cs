@@ -138,7 +138,7 @@ if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
                 {
                     if (environment.IsDevelopment())
                     {
-                        origins = ["https://localhost:5443", "http://localhost:5000", "http://localhost:5050"];
+                        origins = ["https://localhost:5001", "http://localhost:5000", "http://localhost:5050"];
                     }
                     else
                     {

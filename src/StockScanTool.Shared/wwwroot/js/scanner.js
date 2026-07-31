@@ -147,6 +147,31 @@
         });
     }
 
+    // ── Local storage helpers (used for session persistence) ──
+    window.getStorageItem = function (key) {
+        try {
+            return window.localStorage.getItem(key);
+        } catch (e) {
+            return null;
+        }
+    };
+
+    window.setStorageItem = function (key, value) {
+        try {
+            window.localStorage.setItem(key, value);
+        } catch (e) {
+            // storage unavailable (e.g. private mode) — session works in-memory
+        }
+    };
+
+    window.removeStorageItem = function (key) {
+        try {
+            window.localStorage.removeItem(key);
+        } catch (e) {
+            // ignore
+        }
+    };
+
     window.stockScan = {
         startContinuous: function (elementId, dotNetRef) {
             return startScanner(elementId, dotNetRef, true);

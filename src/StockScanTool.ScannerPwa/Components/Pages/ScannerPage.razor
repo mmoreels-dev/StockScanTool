@@ -82,10 +82,10 @@ else
     private BarcodeLookupResponse? lastScan;
     private string scannerStatus = "Initializing scanner...";
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
         Scanner.OnBarcodeDetected += OnBarcodeDetected;
-        return Task.CompletedTask;
+        await Api.InitializeAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -208,7 +208,7 @@ else
     private async Task Logout()
     {
         await Scanner.StopScanningAsync();
-        Api.Logout();
+        await Api.Logout();
         Nav.NavigateTo("/");
     }
 

@@ -44,7 +44,7 @@ public class AuthService : IAuthService
 
     public async Task<DeviceLoginResponse?> LoginDeviceAsync(DeviceLoginRequest request)
     {
-        var hashedKey = _apiKeyHasher.Hash(request.ApiKey);
+        var hashedKey = _apiKeyHasher.Hash(request.ApiKey.Trim());
         var device = await _deviceRepo.GetByApiKeyAsync(hashedKey);
         if (device is null)
         {

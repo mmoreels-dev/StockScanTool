@@ -32,11 +32,24 @@ public class UserService : CrudService<User, UserDto, CreateUserRequest, UpdateU
         user.Id, user.Username, user.DisplayName, user.IsActive,
         user.UserRoles.Select(ur => ur.Role.Name).ToList());
 
-    protected override User ToEntity(CreateUserRequest request)
-        => throw new NotSupportedException();
+    protected override User ToEntity(CreateUserRequest request) => new()
+    {
+        Username = request.Username,
+        PasswordHash = _passwordHasher.Hash(request.Password),
+        DisplayName = request.DisplayName,
+        IsActive = true,
+        UserRoles = request.RoleIds.Select(id => new UserRole { RoleId = id }).ToList()
+    };
 
     protected override void UpdateEntity(User entity, UpdateUserRequest request)
-        => throw new NotSupportedException();
+    {
+        entity.Username = request.Username;
+        entity.DisplayName = request.DisplayName;
+        entity.IsActive = request.IsActive;
+        entity.UserRoles.Clear();
+        foreach (var id in request.RoleIds)
+            entity.UserRoles.Add(new UserRole { RoleId = id });
+    }
 
     public override async Task<PagedResult<UserDto>> GetPagedAsync(PagedRequest request, CancellationToken cancellationToken = default)
     {
@@ -88,22 +101,15 @@ public class UserService : CrudService<User, UserDto, CreateUserRequest, UpdateU
         if (await _repo.AsQueryable().AnyAsync(u => u.Username == request.Username, cancellationToken))
             throw new ValidationException($"A user with username '{request.Username}' already exists.");
 
+        var entity = ToEntity(request);
         var roles = await _roleRepo.AsQueryable()
             .Where(r => request.RoleIds.Contains(r.Id))
             .ToListAsync(cancellationToken);
+        entity.UserRoles = roles.Select(r => new UserRole { Role = r }).ToList();
 
-        var user = new User
-        {
-            Username = request.Username,
-            PasswordHash = _passwordHasher.Hash(request.Password),
-            DisplayName = request.DisplayName,
-            IsActive = true,
-            UserRoles = roles.Select(r => new UserRole { Role = r }).ToList()
-        };
-
-        await _repo.AddAsync(user);
+        await _repo.AddAsync(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToDto(user);
+        return ToDto(entity);
     }
 
     public override async Task<UserDto?> UpdateAsync(int id, UpdateUserRequest request, CancellationToken cancellationToken = default)
@@ -122,14 +128,11 @@ public class UserService : CrudService<User, UserDto, CreateUserRequest, UpdateU
         if (await _repo.AsQueryable().AnyAsync(u => u.Username == request.Username && u.Id != id, cancellationToken))
             throw new ValidationException($"A user with username '{request.Username}' already exists.");
 
-        user.Username = request.Username;
-        user.DisplayName = request.DisplayName;
-        user.IsActive = request.IsActive;
-
-        user.UserRoles.Clear();
+        UpdateEntity(user, request);
         var roles = await _roleRepo.AsQueryable()
             .Where(r => request.RoleIds.Contains(r.Id))
             .ToListAsync(cancellationToken);
+        user.UserRoles.Clear();
         foreach (var role in roles)
             user.UserRoles.Add(new UserRole { Role = role });
 

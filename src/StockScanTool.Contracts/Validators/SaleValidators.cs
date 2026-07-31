@@ -31,7 +31,8 @@ public class DeviceLoginRequestValidator : AbstractValidator<DeviceLoginRequest>
     public DeviceLoginRequestValidator()
     {
         RuleFor(x => x.ApiKey)
-            .NotEmpty().WithMessage("API key is required.");
+            .NotEmpty().WithMessage("API key is required.")
+            .Must(x => !string.IsNullOrWhiteSpace(x)).WithMessage("API key is required.");
     }
 }
 

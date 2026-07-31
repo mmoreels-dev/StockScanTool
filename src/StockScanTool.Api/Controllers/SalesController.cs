@@ -10,12 +10,10 @@ namespace StockScanTool.Api.Controllers;
 public class SalesController : BaseController
 {
     private readonly ISaleService _saleService;
-    private readonly IProductService _productService;
 
-    public SalesController(ISaleService saleService, IProductService productService)
+    public SalesController(ISaleService saleService)
     {
         _saleService = saleService;
-        _productService = productService;
     }
 
     [HttpPost]
@@ -43,18 +41,4 @@ public class SalesController : BaseController
     public async Task<ActionResult<ApiResponse<List<SaleTransactionDto>>>> GetByStore(
         int storeId, [FromQuery] DateTime? from, [FromQuery] DateTime? to)
         => Ok(ApiResponse<List<SaleTransactionDto>>.Ok(await _saleService.GetByStoreAsync(storeId, from, to)));
-
-    [HttpGet("lookup/{barcode}")]
-    [AllowAnonymous]
-    public async Task<ActionResult<ApiResponse<BarcodeLookupResponse>>> LookupBarcode(
-        string barcode, [FromQuery] int storeId)
-    {
-        var product = await _productService.GetByBarcodeAsync(barcode);
-        if (product is null)
-            return NotFound(ApiResponse<BarcodeLookupResponse>.Fail($"Product with barcode '{barcode}' not found."));
-
-        var response = new BarcodeLookupResponse(
-            product.Id, product.Sku, product.Name, product.Description, product.Barcode, product.Price);
-        return Ok(ApiResponse<BarcodeLookupResponse>.Ok(response));
-    }
 }
