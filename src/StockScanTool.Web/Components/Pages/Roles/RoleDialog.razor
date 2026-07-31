@@ -33,8 +33,8 @@
                 @foreach (var perm in group)
                 {
                     <MudItem Style="padding:2px 8px;">
-                        <MudCheckbox T="bool" Checked="@(selectedPermissionIds.GetValueOrDefault(perm.Id))"
-                                     CheckedChanged="(bool v) => { selectedPermissionIds[perm.Id] = v; StateHasChanged(); }"
+                        <MudCheckBox T="bool" Value="@(selectedPermissionIds.GetValueOrDefault(perm.Id))"
+                                     ValueChanged="(bool v) => { selectedPermissionIds[perm.Id] = v; StateHasChanged(); }"
                                      Label="@perm.Name" Color="Color.Primary" Dense="true" />
                     </MudItem>
                 }
